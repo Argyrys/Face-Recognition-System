@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Enrollment - VC Cabin</title>
+<style>
+  :root { --navy:#10233f; --gold:#f2b705; --bg:#f4f6f9; --ok:#1f9d55; --bad:#c0392b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI",Arial,sans-serif; background:var(--bg); color:#1b1b1b; }
+  header { background:var(--navy); color:#fff; padding:14px 24px; display:flex; justify-content:space-between; }
+  header h1 { margin:0; font-size:18px; }
+  header a { color:var(--gold); text-decoration:none; font-weight:600; }
+  main { max-width:1000px; margin:0 auto; padding:20px; }
+  .msg { background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; padding:10px 14px; border-radius:6px; margin-bottom:16px; }
+  .msg.err { background:#fdecea; border-color:#f5c6cb; color:#922; }
+  .panel { background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:18px; overflow:hidden; }
+  .panel h3 { margin:0; padding:12px 16px; background:var(--navy); color:#fff; font-size:15px; }
+  form { padding:18px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weight:600; }
+  input[type=text], select { width:100%; padding:9px; border:1px solid #ccc; border-radius:5px; font-size:14px; }
+  .full { grid-column:1 / -1; }
+  .consent { background:#fffbe6; border:1px solid #ffe58f; padding:10px 12px; border-radius:6px; font-size:13px; }
+  .consent input { margin-right:8px; }
+  button { background:var(--navy); color:#fff; border:none; padding:12px 26px; font-size:15px; border-radius:6px; cursor:pointer; }
+  button:hover { background:#1a3a68; }
+  button.small { padding:5px 12px; font-size:12px; background:#8b1e1e; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { padding:9px 14px; text-align:left; border-bottom:1px solid #eee; }
+  th { background:#fafbfc; color:#555; font-size:12px; text-transform:uppercase; }
+  .pill { padding:2px 10px; border-radius:10px; font-size:12px; background:#eee; }
+  .pill.active { background:#d9f2e3; color:#1b5e20; }
+  .muted { color:#999; text-align:center; padding:16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FACE ENROLLMENT &mdash; VC CABIN</h1>
+  <a href="/">&larr; Back to dashboard</a>
+</header>
+<main>
+  {% if msg %}
+  <div class="msg {% if 'required' in msg or 'no face' in msg or 'consent' in msg or 'cannot' in msg or 'Upload' in msg %}err{% endif %}">{{ msg }}</div>
+  {% endif %}
+
+  <div class="panel">
+    <h3>ENROLL A CONSENTED PERSON</h3>
+    <form method="post" enctype="multipart/form-data">
+      <div>
+        <label>Full name</label>
+        <input type="text" name="name" required placeholder="e.g. Rahul Sharma">
+      </div>
+      <div>
+        <label>Category</label>
+        <select name="role">
+          <option value="Student">Student</option>
+          <option value="Faculty">Faculty</option>
+        </select>
+      </div>
+      <div>
+        <label>Department</label>
+        <input type="text" name="department" required placeholder="e.g. CSE">
+      </div>
+      <div>
+        <label>Student ID / Employee ID</label>
+        <input type="text" name="external_id" required placeholder="e.g. 22CSE045">
+      </div>
+      <div class="full">
+        <label>Photo(s) &mdash; one clear front-facing image; add more for better accuracy</label>
+        <input type="file" name="photos" accept="image/*" multiple required>
+      </div>
+      <div class="consent full">
+        <label style="margin:0;font-weight:400">
+          <input type="checkbox" name="consent" required>
+          I confirm this person has consented to biometric (face) enrollment for this prototype.
+          Data is stored locally and can be deleted on request.
+        </label>
+      </div>
+      <div class="full">
+        <button type="submit">Enroll person</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h3>ENROLLED PERSONS</h3>
+    <table>
+      <thead><tr><th>#</th><th>Name</th><th>Category</th><th>Department</th><th>ID</th><th>Consent</th><th>Status</th><th>Enrolled</th><th></th></tr></thead>
+      <tbody>
+        {% for p in persons %}
+        <tr>
+          <td>{{ p.id }}</td>
+          <td>{{ p.name }}</td>
+          <td>{{ p.role }}</td>
+          <td>{{ p.department }}</td>
+          <td>{{ p.external_id }}</td>
+          <td>{{ "Yes" if p.consent else "No" }}</td>
+          <td><span class="pill {{ 'active' if p.status == 'active' else '' }}">{{ p.status }}</span></td>
+          <td>{{ p.created_at }}</td>
+          <td>
+            {% if p.status == 'active' %}
+            <form method="post" action="/api/persons/{{ p.id }}/deactivate" onsubmit="return confirm('Deactivate {{ p.name }}?')">
+              <button class="small">Deactivate</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="muted">No persons enrolled yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>

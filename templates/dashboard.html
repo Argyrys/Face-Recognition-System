@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VC Cabin Dashboard</title>
+<style>
+  :root { --navy:#10233f; --gold:#f2b705; --ok:#1f9d55; --bad:#c0392b; --bg:#f4f6f9; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI",Arial,sans-serif; background:var(--bg); color:#1b1b1b; }
+  header { background:var(--navy); color:#fff; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; }
+  header h1 { margin:0; font-size:19px; letter-spacing:.5px; }
+  .status { font-size:13px; opacity:.9; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#777; margin-right:6px; }
+  .dot.on { background:#2ecc71; }
+  main { max-width:1100px; margin:0 auto; padding:20px; }
+  .stats { display:flex; gap:14px; margin-bottom:18px; }
+  .stat { background:#fff; border-radius:8px; padding:12px 18px; flex:1; box-shadow:0 1px 3px rgba(0,0,0,.08); text-align:center; }
+  .stat b { display:block; font-size:26px; color:var(--navy); }
+  .stat span { font-size:12px; color:#666; text-transform:uppercase; letter-spacing:.6px; }
+
+  .alert-card { background:#fff; border:3px solid var(--gold); border-radius:10px; padding:18px; margin-bottom:18px; display:none; }
+  .alert-card h2 { margin:0 0 12px; text-align:center; background:var(--navy); color:#fff; padding:10px; border-radius:6px; letter-spacing:2px; }
+  .alert-body { display:flex; gap:22px; align-items:flex-start; }
+  .alert-photo { width:170px; height:170px; object-fit:cover; border:2px solid var(--navy); border-radius:6px; background:#eee; }
+  .alert-info { flex:1; font-size:17px; line-height:1.9; }
+  .alert-info .row b { display:inline-block; width:130px; color:#444; }
+  .badge { display:inline-block; padding:3px 14px; border-radius:14px; font-weight:bold; font-size:15px; }
+  .badge.ok { background:var(--ok); color:#fff; }
+  .badge.bad { background:var(--bad); color:#fff; }
+  .unknown-banner { display:none; background:#fff3cd; border:1px solid #ffe08a; color:#8a6d00; padding:10px; border-radius:6px; font-weight:600; text-align:center; margin-bottom:10px; }
+  .actions { text-align:center; margin-top:14px; }
+  button.ack { background:var(--navy); color:#fff; border:none; padding:12px 30px; font-size:16px; border-radius:6px; cursor:pointer; }
+  button.ack:hover { background:#1a3a68; }
+  .others { font-size:13px; color:#666; text-align:center; margin-top:8px; }
+
+  .panel { background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:18px; overflow:hidden; }
+  .panel h3 { margin:0; padding:12px 16px; background:var(--navy); color:#fff; font-size:15px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { padding:9px 14px; text-align:left; border-bottom:1px solid #eee; }
+  th { background:#fafbfc; color:#555; font-size:12px; text-transform:uppercase; letter-spacing:.5px; }
+  tr:last-child td { border-bottom:none; }
+  .thumb { width:44px; height:44px; object-fit:cover; border-radius:4px; border:1px solid #ccc; }
+  .muted { color:#999; text-align:center; padding:18px; }
+  a.enroll-link { color:var(--gold); font-weight:600; text-decoration:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>VC CABIN &mdash; VISITOR MONITORING DASHBOARD</h1>
+  <div class="status"><span class="dot" id="dot"></span><span id="pipe-state">connecting&hellip;</span> &nbsp;|&nbsp; <span id="pipe-source"></span></div>
+</header>
+
+<main>
+  <div class="stats">
+    <div class="stat"><b id="s-persons">0</b><span>Enrolled</span></div>
+    <div class="stat"><b id="s-today">0</b><span>Entries Today</span></div>
+    <div class="stat"><b id="s-alerts">0</b><span>Pending Alerts</span></div>
+    <div class="stat"><b id="s-frames">0</b><span>Frames Processed</span></div>
+  </div>
+
+  <div class="alert-card" id="alert-card">
+    <h2>VC CABIN VISITOR ALERT</h2>
+    <div class="unknown-banner" id="unknown-banner">Unknown / Manual Verification Required</div>
+    <div class="alert-body">
+      <img class="alert-photo" id="a-photo" alt="Visitor Photograph">
+      <div class="alert-info">
+        <div class="row"><b>Name</b> <span id="a-name"></span></div>
+        <div class="row"><b>Category</b> <span id="a-role"></span></div>
+        <div class="row"><b>Department</b> <span id="a-dept"></span></div>
+        <div class="row"><b>ID</b> <span id="a-id"></span></div>
+        <div class="row"><b>Time</b> <span id="a-time"></span></div>
+        <div class="row"><b>Recognition</b> <span class="badge" id="a-result"></span></div>
+        <div class="row"><b>Confidence</b> <span id="a-conf"></span></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="ack" id="ack-btn">Acknowledge Visitor</button>
+      <div class="others" id="others"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>ENTRY LOG &nbsp;<a class="enroll-link" href="/enroll">+ Enroll a person</a></h3>
+    <table id="entry-table">
+      <thead><tr><th>Photo</th><th>Time</th><th>Name</th><th>Category</th><th>Department</th><th>ID</th><th>Result</th><th>Confidence</th></tr></thead>
+      <tbody id="log-body"><tr><td colspan="8" class="muted">No entries yet</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString();
+}
+
+async function renderStatus() {
+  try {
+    const s = await (await fetch("/api/status")).json();
+    document.getElementById("dot").className = "dot" + (s.running ? " on" : "");
+    document.getElementById("pipe-state").textContent =
+      s.running ? "RUNNING" : (s.state || "stopped").toUpperCase();
+    document.getElementById("pipe-source").textContent = s.source || "";
+    if (s.stats) {
+      document.getElementById("s-persons").textContent = s.stats.persons;
+      document.getElementById("s-today").textContent = s.stats.entries_today;
+      document.getElementById("s-alerts").textContent = s.stats.pending_alerts;
+    }
+    document.getElementById("s-frames").textContent = s.frames || 0;
+  } catch (e) {}
+}
+
+async function renderAlerts() {
+  try {
+    const alerts = await (await fetch("/api/alerts")).json();
+    const card = document.getElementById("alert-card");
+    if (!alerts.length) { card.style.display = "none"; return; }
+    const a = alerts[0];
+    card.style.display = "block";
+    document.getElementById("a-photo").src = a.snapshot_url || "";
+    document.getElementById("a-name").textContent = a.name;
+    document.getElementById("a-role").textContent = a.role || "Visitor";
+    document.getElementById("a-dept").textContent = a.department || "-";
+    document.getElementById("a-id").textContent = a.external_id || "-";
+    document.getElementById("a-time").textContent = (a.recognized_at || "").replace("T", " ");
+    const badge = document.getElementById("a-result");
+    badge.textContent = a.result;
+    badge.className = "badge " + (a.result === "MATCHED" ? "ok" : "bad");
+    document.getElementById("a-conf").textContent =
+      a.confidence_pct != null ? a.confidence_pct + "%" : "-";
+    document.getElementById("unknown-banner").style.display =
+      a.result === "MATCHED" ? "none" : "block";
+    document.getElementById("others").textContent =
+      alerts.length > 1 ? (alerts.length - 1) + " more unacknowledged alert(s)" : "";
+    document.getElementById("ack-btn").onclick = async () => {
+      await fetch("/api/alerts/" + a.alert_id + "/ack", { method: "POST" });
+      renderAlerts();
+    };
+  } catch (e) {}
+}
+
+async function renderEntries() {
+  try {
+    const rows = await (await fetch("/api/entries?limit=25")).json();
+    const tbody = document.querySelector("#entry-table tbody");
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="muted">No entries yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(e => `
+      <tr>
+        <td>${e.snapshot_url ? `<img class="thumb" src="${e.snapshot_url}">` : ""}</td>
+        <td>${(e.recognized_at || "").replace("T", " ")}</td>
+        <td>${e.name}</td>
+        <td>${e.role || "-"}</td>
+        <td>${e.department || "-"}</td>
+        <td>${e.external_id || "-"}</td>
+        <td><span class="badge ${e.result === "MATCHED" ? "ok" : "bad"}">${e.result}</span></td>
+        <td>${e.confidence != null ? (e.confidence * 100).toFixed(1) + "%" : "-"}</td>
+      </tr>`).join("");
+  } catch (e) {}
+}
+
+async function tick() {
+  await Promise.all([renderStatus(), renderAlerts(), renderEntries()]);
+}
+
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>

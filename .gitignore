@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+database/*.db
+static/snapshots/entry_*.jpg
+static/snapshots/person_*.jpg
+server.log
+server.err
+server.pid
+visitor.mp4
