@@ -157,6 +157,11 @@ class FrameSource:
                 )
             self.label = f"webcam:{index}"
 
+    @property
+    def is_stream(self) -> bool:
+        """True for network sources, which can come back after a dropout."""
+        return self._stream is not None
+
     def read(self):
         """Next BGR frame. None = source exhausted (video file only;
         image directories cycle forever)."""

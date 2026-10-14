@@ -82,6 +82,12 @@ class Pipeline(threading.Thread):
         while not self._stop_event.is_set():
             frame = self.source.read()
             if frame is None:
+                if self.source.is_stream:
+                    # A phone camera drops out (screen off, wifi blip).
+                    # Keep retrying instead of killing the pipeline.
+                    self.status["state"] = "reconnecting to camera..."
+                    time.sleep(1.0)
+                    continue
                 self.status["state"] = "source ended"
                 break
             self.status["frames"] += 1
