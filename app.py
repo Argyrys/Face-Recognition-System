@@ -101,6 +101,21 @@ def api_ack(alert_id):
     return jsonify({"ok": db.ack_alert(alert_id)})
 
 
+@app.route("/api/alerts/<int:alert_id>/reject", methods=["POST"])
+def api_reject(alert_id):
+    return jsonify({"ok": db.reject_alert(alert_id)})
+
+
+@app.route("/api/resolved")
+def api_resolved():
+    limit = min(int(request.args.get("limit", 20)), 100)
+    alerts = db.resolved_alerts(limit)
+    for a in alerts:
+        a["snapshot_url"] = f"/static/snapshots/{a['snapshot']}" if a.get("snapshot") else None
+        a["confidence_pct"] = round(a["confidence"] * 100, 1) if a.get("confidence") is not None else None
+    return jsonify(alerts)
+
+
 @app.route("/api/alerts/ack_all", methods=["POST"])
 def api_ack_all():
     return jsonify({"acked": db.ack_all()})

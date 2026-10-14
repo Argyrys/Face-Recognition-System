@@ -106,6 +106,7 @@
   .pill.ok  { background:var(--ok-bg);  color:var(--ok); }
   .pill.bad { background:var(--bad-bg); color:var(--bad); }
   .pill.warn{ background:#fff7e6; color:#b45309; }
+  .pill.gray{ background:#f1f5f9; color:var(--muted); }
   .kv { display:grid; grid-template-columns:110px 1fr; row-gap:8px;
         margin-top:18px; font-size:14px; }
   .kv b { color:var(--muted); font-weight:600; }
@@ -136,6 +137,12 @@
   .notif .ack { background:#fff; border:1px solid var(--line); color:var(--ink);
                 padding:7px 13px; border-radius:8px; font-size:12.5px; cursor:pointer; }
   .notif .ack:hover { border-color:var(--blue); color:var(--blue); }
+  .notif .rej { background:#fff; border:1px solid #f3c9c9; color:var(--bad);
+                padding:7px 13px; border-radius:8px; font-size:12.5px; cursor:pointer; }
+  .notif .rej:hover { background:var(--bad); border-color:var(--bad); color:#fff; }
+  .notif .acts { display:flex; gap:8px; flex-shrink:0; }
+  .sub-head { font-size:12px; font-weight:800; letter-spacing:.8px;
+              color:var(--muted-2); text-transform:uppercase; margin:22px 0 0; }
 
   /* workflow */
   .steps { display:flex; align-items:flex-start; justify-content:space-between;
@@ -531,6 +538,7 @@
           <button class="btn-ghost" id="ack-all">Mark all read</button>
         </div>
         <div id="notif-full"></div>
+        <div id="resolved-box"></div>
       </div>
     </section>
   </main>
@@ -639,13 +647,34 @@ function notifHtml(a) {
         ${a.confidence_pct != null ? " · " + a.confidence_pct + "%" : ""}
         · ${fmtTime(a.recognized_at)}</div>
     </div>
-    <button class="ack" data-ack="${a.alert_id}">Acknowledge</button>
+    <div class="acts">
+      <button class="rej" data-reject="${a.alert_id}">Reject</button>
+      <button class="ack" data-ack="${a.alert_id}">Acknowledge</button>
+    </div>
+  </div>`;
+}
+function resolvedHtml(a) {
+  const rejected = a.decision === "rejected";
+  return `<div class="notif">
+    ${a.snapshot_url ? `<img src="${esc(a.snapshot_url)}" alt="">` : ""}
+    <div class="body">
+      <b>${esc(a.name)}
+        <span class="pill ${rejected ? "bad" : "gray"}">${rejected ? "REJECTED" : "ACKNOWLEDGED"}</span>
+      </b>
+      <div class="m">${esc(a.role || "Visitor")}${a.department ? " · " + esc(a.department) : ""}
+        · ${fmtTime(a.recognized_at)}</div>
+    </div>
   </div>`;
 }
 function wireAck(root) {
   root.querySelectorAll("[data-ack]").forEach(btn =>
     btn.onclick = async () => {
       await fetch(`/api/alerts/${btn.dataset.ack}/ack`, {method:"POST"});
+      refreshAll();
+    });
+  root.querySelectorAll("[data-reject]").forEach(btn =>
+    btn.onclick = async () => {
+      await fetch(`/api/alerts/${btn.dataset.reject}/reject`, {method:"POST"});
       refreshAll();
     });
 }
@@ -666,6 +695,21 @@ async function renderAlerts() {
     const full = $("notif-full");
     full.innerHTML = n ? alerts.map(notifHtml).join("") : empty;
     wireAck(full);
+  } catch (e) {}
+  renderResolved();
+}
+async function renderResolved() {
+  try {
+    const rows = await (await fetch("/api/resolved?limit=12")).json();
+    const box = $("resolved-box");
+    if (!box) return;
+    if (!rows.length) {
+      box.innerHTML = "";
+      return;
+    }
+    box.innerHTML =
+      `<div class="sub-head">Recently resolved</div>` +
+      rows.map(resolvedHtml).join("");
   } catch (e) {}
 }
 $("ack-all").onclick = async () => {

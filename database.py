@@ -63,8 +63,19 @@ class Database:
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
-        self._conn.commit()
+        self._migrate()
         self._version = 0
+
+    def _migrate(self):
+        """Add the alert decision column and backfill older rows."""
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(alerts)")}
+        if "decision" not in cols:
+            self._conn.execute("ALTER TABLE alerts ADD COLUMN decision TEXT")
+            # alerts already acked before decisions existed count as acknowledged
+            self._conn.execute(
+                "UPDATE alerts SET decision = 'acknowledged' WHERE acked = 1"
+            )
+            self._conn.commit()
 
     # -- persons -----------------------------------------------------------
 
@@ -160,22 +171,44 @@ class Database:
         rows = self._conn.execute(
             "SELECT a.id AS alert_id, a.acked, a.created_at AS alert_at,"
             " e.* FROM alerts a JOIN entry_log e ON e.id = a.entry_id"
-            " WHERE a.acked = 0 AND a.created_at >= " + _ALERT_TTL +
+            " WHERE a.decision IS NULL AND a.created_at >= " + _ALERT_TTL +
             " ORDER BY a.id DESC LIMIT 20"
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def ack_alert(self, alert_id: int) -> bool:
+    def resolved_alerts(self, limit=20):
+        rows = self._conn.execute(
+            "SELECT a.id AS alert_id, a.decision, a.created_at AS alert_at,"
+            " e.* FROM alerts a JOIN entry_log e ON e.id = a.entry_id"
+            " WHERE a.decision IS NOT NULL"
+            " ORDER BY a.id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def resolve_alert(self, alert_id: int, decision: str) -> bool:
+        """decision: 'acknowledged' or 'rejected'. Both clear the notification."""
+        if decision not in ("acknowledged", "rejected"):
+            raise ValueError(f"unknown decision: {decision}")
         with self._lock:
             cur = self._conn.execute(
-                "UPDATE alerts SET acked = 1 WHERE id = ?", (alert_id,)
+                "UPDATE alerts SET acked = 1, decision = ? WHERE id = ?",
+                (decision, alert_id),
             )
             self._conn.commit()
             return bool(cur.rowcount)
 
+    def ack_alert(self, alert_id: int) -> bool:
+        return self.resolve_alert(alert_id, "acknowledged")
+
+    def reject_alert(self, alert_id: int) -> bool:
+        return self.resolve_alert(alert_id, "rejected")
+
     def ack_all(self) -> int:
         with self._lock:
-            cur = self._conn.execute("UPDATE alerts SET acked = 1 WHERE acked = 0")
+            cur = self._conn.execute(
+                "UPDATE alerts SET acked = 1, decision = 'acknowledged'"
+                " WHERE decision IS NULL"
+            )
             self._conn.commit()
             return cur.rowcount
 
@@ -202,7 +235,11 @@ class Database:
                 " WHERE status='active' AND role='Faculty'"
             ),
             "pending_alerts": q(
-                "SELECT COUNT(*) FROM alerts WHERE acked = 0"
+                "SELECT COUNT(*) FROM alerts WHERE decision IS NULL"
                 " AND created_at >= " + _ALERT_TTL
+            ),
+            "rejected_today": q(
+                "SELECT COUNT(*) FROM alerts WHERE decision = 'rejected'"
+                " AND date(created_at) = date('now','localtime')"
             ),
         }
