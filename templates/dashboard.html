@@ -2,172 +2,642 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>VC Cabin Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VC Cabin &mdash; Face Recognition Dashboard</title>
 <style>
-  :root { --navy:#10233f; --gold:#f2b705; --ok:#1f9d55; --bad:#c0392b; --bg:#f4f6f9; }
+  :root {
+    --navy:#0d1526; --navy-2:#141d33; --blue:#2563eb; --blue-hover:#1d4ed8;
+    --bg:#f4f6f9; --card:#ffffff; --line:#e8ecf2;
+    --ink:#0f172a; --muted:#64748b; --muted-2:#94a3b8;
+    --ok:#16a34a; --ok-bg:#e7f6ec; --bad:#dc2626; --bad-bg:#fdecec;
+    --radius:14px;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:"Segoe UI",Arial,sans-serif; background:var(--bg); color:#1b1b1b; }
-  header { background:var(--navy); color:#fff; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; }
-  header h1 { margin:0; font-size:19px; letter-spacing:.5px; }
-  .status { font-size:13px; opacity:.9; }
-  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#777; margin-right:6px; }
-  .dot.on { background:#2ecc71; }
-  main { max-width:1100px; margin:0 auto; padding:20px; }
-  .stats { display:flex; gap:14px; margin-bottom:18px; }
-  .stat { background:#fff; border-radius:8px; padding:12px 18px; flex:1; box-shadow:0 1px 3px rgba(0,0,0,.08); text-align:center; }
-  .stat b { display:block; font-size:26px; color:var(--navy); }
-  .stat span { font-size:12px; color:#666; text-transform:uppercase; letter-spacing:.6px; }
+  html, body { height:100%; }
+  body { margin:0; font-family:"Segoe UI", system-ui, Arial, sans-serif;
+         background:var(--bg); color:var(--ink); font-size:14px; }
 
-  .alert-card { background:#fff; border:3px solid var(--gold); border-radius:10px; padding:18px; margin-bottom:18px; display:none; }
-  .alert-card h2 { margin:0 0 12px; text-align:center; background:var(--navy); color:#fff; padding:10px; border-radius:6px; letter-spacing:2px; }
-  .alert-body { display:flex; gap:22px; align-items:flex-start; }
-  .alert-photo { width:170px; height:170px; object-fit:cover; border:2px solid var(--navy); border-radius:6px; background:#eee; }
-  .alert-info { flex:1; font-size:17px; line-height:1.9; }
-  .alert-info .row b { display:inline-block; width:130px; color:#444; }
-  .badge { display:inline-block; padding:3px 14px; border-radius:14px; font-weight:bold; font-size:15px; }
-  .badge.ok { background:var(--ok); color:#fff; }
-  .badge.bad { background:var(--bad); color:#fff; }
-  .unknown-banner { display:none; background:#fff3cd; border:1px solid #ffe08a; color:#8a6d00; padding:10px; border-radius:6px; font-weight:600; text-align:center; margin-bottom:10px; }
-  .actions { text-align:center; margin-top:14px; }
-  button.ack { background:var(--navy); color:#fff; border:none; padding:12px 30px; font-size:16px; border-radius:6px; cursor:pointer; }
-  button.ack:hover { background:#1a3a68; }
-  .others { font-size:13px; color:#666; text-align:center; margin-top:8px; }
+  .layout { display:flex; min-height:100vh; }
 
-  .panel { background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:18px; overflow:hidden; }
-  .panel h3 { margin:0; padding:12px 16px; background:var(--navy); color:#fff; font-size:15px; }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  th, td { padding:9px 14px; text-align:left; border-bottom:1px solid #eee; }
-  th { background:#fafbfc; color:#555; font-size:12px; text-transform:uppercase; letter-spacing:.5px; }
-  tr:last-child td { border-bottom:none; }
-  .thumb { width:44px; height:44px; object-fit:cover; border-radius:4px; border:1px solid #ccc; }
-  .muted { color:#999; text-align:center; padding:18px; }
-  a.enroll-link { color:var(--gold); font-weight:600; text-decoration:none; }
+  /* ---------------------------------------------------------- sidebar */
+  .sidebar { width:310px; flex:0 0 310px; background:var(--navy); color:#e2e8f0;
+             display:flex; flex-direction:column; padding:26px 20px 20px;
+             position:sticky; top:0; height:100vh; }
+  .brand { display:flex; align-items:center; gap:13px; padding:0 6px 24px; }
+  .brand .logo { width:46px; height:46px; border-radius:12px; background:var(--blue);
+                 color:#fff; font-weight:800; font-size:16px; display:flex;
+                 align-items:center; justify-content:center; letter-spacing:.5px; }
+  .brand h1 { margin:0; font-size:20px; color:#fff; }
+  .brand p  { margin:2px 0 0; font-size:13px; color:#8ea0bd; }
+
+  .nav { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .nav a { display:flex; align-items:center; gap:13px; padding:13px 15px;
+           border-radius:10px; color:#c3cee2; text-decoration:none;
+           font-size:15px; font-weight:500; transition:background .15s, color .15s; }
+  .nav a .ico { width:22px; text-align:center; font-size:16px; }
+  .nav a:hover { background:rgba(255,255,255,.06); color:#fff; }
+  .nav a.active { background:var(--blue); color:#fff; font-weight:600;
+                  box-shadow:0 6px 16px rgba(37,99,235,.35); }
+  .nav .count { margin-left:auto; background:var(--blue); color:#fff; font-size:11px;
+                font-weight:700; min-width:20px; height:20px; border-radius:10px;
+                display:flex; align-items:center; justify-content:center; padding:0 6px; }
+  .nav a.active .count { background:rgba(255,255,255,.25); }
+
+  .sidebar .spacer { flex:1; }
+  .sys-card { background:var(--navy-2); border:1px solid rgba(255,255,255,.07);
+              border-radius:12px; padding:14px 16px; display:flex; gap:12px;
+              align-items:center; margin-bottom:16px; }
+  .sys-card .dot { width:10px; height:10px; border-radius:50%; background:#334155;
+                   flex:0 0 10px; }
+  .sys-card .dot.on { background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,.18); }
+  .sys-card b { display:block; color:#fff; font-size:14px; }
+  .sys-card small { color:#8ea0bd; font-size:12.5px; }
+  .side-foot { text-align:center; color:#5b6b87; font-size:12.5px; }
+
+  /* ------------------------------------------------------------- main */
+  main { flex:1; padding:26px 30px 40px; max-width:1300px; }
+  .view h2 { margin:0; font-size:19px; }
+  .sub { margin:5px 0 0; color:var(--muted); font-size:13.5px; }
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:var(--radius); padding:24px; margin-bottom:22px;
+          box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  @media (max-width:1050px) { .grid2 { grid-template-columns:1fr; }
+    .sidebar { width:230px; flex-basis:230px; } }
+
+  /* upload card */
+  .drop { border:2px dashed #d3dae5; border-radius:12px; padding:34px 24px;
+          text-align:center; transition:border-color .15s, background .15s; }
+  .drop.has-file { border-color:var(--blue); background:#f5f9ff; }
+  .drop h3 { margin:0 0 8px; font-size:17px; }
+  .drop p { margin:0 0 20px; color:var(--muted); max-width:340px;
+            margin-inline:auto; line-height:1.5; }
+  .btn { border:none; border-radius:9px; cursor:pointer; font:inherit;
+         font-weight:600; transition:background .15s, transform .05s; }
+  .btn:active { transform:translateY(1px); }
+  .btn-blue { background:var(--blue); color:#fff; padding:12px 26px; font-size:15px; }
+  .btn-blue:hover { background:var(--blue-hover); }
+  .btn-dark { background:#0f172a; color:#fff; width:100%; padding:16px;
+              font-size:16px; margin-top:18px; letter-spacing:.2px;
+              display:flex; align-items:center; justify-content:center; gap:10px; }
+  .btn-dark:hover { background:#1e293b; }
+  .btn-dark[disabled] { opacity:.6; cursor:wait; }
+  .file-note { margin-top:16px; color:var(--muted-2); font-size:13px; }
+  .drop-err { color:var(--bad); font-size:13px; margin-top:10px; min-height:16px; }
+
+  /* result card */
+  .result-card { display:flex; flex-direction:column; min-height:300px; }
+  .result-empty { flex:1; display:flex; flex-direction:column; align-items:center;
+                  justify-content:center; text-align:center; padding:30px 10px; }
+  .result-empty .avatar { width:96px; height:96px; border-radius:50%;
+                          background:#eef2f9; color:#b7c3d6; font-size:44px;
+                          display:flex; align-items:center; justify-content:center;
+                          margin-bottom:18px; }
+  .result-empty h3 { margin:0 0 8px; font-size:18px; }
+  .result-empty p { margin:0; color:var(--muted); max-width:340px; line-height:1.55; }
+  .result-body { display:none; }
+  .result-top { display:flex; gap:18px; align-items:center; }
+  .result-top img { width:104px; height:104px; object-fit:cover; border-radius:12px;
+                    border:1px solid var(--line); background:#f1f5f9; }
+  .result-top .name { font-size:20px; font-weight:700; margin:0 0 4px; }
+  .result-top .meta { color:var(--muted); font-size:13.5px; line-height:1.7; }
+  .pill { display:inline-block; padding:4px 14px; border-radius:999px;
+          font-size:12.5px; font-weight:700; letter-spacing:.4px; }
+  .pill.ok  { background:var(--ok-bg);  color:var(--ok); }
+  .pill.bad { background:var(--bad-bg); color:var(--bad); }
+  .pill.warn{ background:#fff7e6; color:#b45309; }
+  .kv { display:grid; grid-template-columns:110px 1fr; row-gap:8px;
+        margin-top:18px; font-size:14px; }
+  .kv b { color:var(--muted); font-weight:600; }
+  .conf-bar { height:8px; border-radius:4px; background:#eef2f7; margin-top:16px;
+              overflow:hidden; }
+  .conf-bar i { display:block; height:100%; border-radius:4px; background:var(--blue);
+                width:0; transition:width .6s ease; }
+
+  /* notifications card */
+  .card-head { display:flex; align-items:flex-start; justify-content:space-between;
+               gap:12px; margin-bottom:6px; }
+  .count-chip { background:#eef4ff; color:var(--blue); font-weight:700; font-size:13px;
+                min-width:30px; height:30px; padding:0 8px; border-radius:999px;
+                display:flex; align-items:center; justify-content:center; }
+  .empty-box { background:#f7f9fc; border:1px solid var(--line); border-radius:12px;
+               padding:26px 20px; text-align:center; margin-top:16px; }
+  .empty-box .bell { font-size:30px; display:block; margin-bottom:10px; }
+  .empty-box b { display:block; font-size:15px; margin-bottom:6px; }
+  .empty-box span { color:var(--muted); font-size:13.5px; }
+  .notif { display:flex; gap:14px; align-items:center; background:#f7f9fc;
+           border:1px solid var(--line); border-radius:12px; padding:13px 15px;
+           margin-top:12px; }
+  .notif img { width:46px; height:46px; border-radius:9px; object-fit:cover;
+               background:#e8edf5; }
+  .notif .body { flex:1; min-width:0; }
+  .notif .body b { font-size:14px; }
+  .notif .body .m { color:var(--muted); font-size:12.5px; margin-top:3px; }
+  .notif .ack { background:#fff; border:1px solid var(--line); color:var(--ink);
+                padding:7px 13px; border-radius:8px; font-size:12.5px; cursor:pointer; }
+  .notif .ack:hover { border-color:var(--blue); color:var(--blue); }
+
+  /* workflow */
+  .steps { display:flex; align-items:flex-start; justify-content:space-between;
+           margin-top:34px; }
+  .step { display:flex; flex-direction:column; align-items:center; gap:11px;
+          width:80px; text-align:center; }
+  .step .n { width:46px; height:46px; border-radius:50%; background:#f1f5f9;
+             color:var(--muted-2); font-weight:700; font-size:14px;
+             display:flex; align-items:center; justify-content:center;
+             transition:background .25s, color .25s, box-shadow .25s; }
+  .step .lbl { font-size:12.5px; color:#475569; font-weight:600; }
+  .step.active .n { background:var(--blue); color:#fff;
+                    box-shadow:0 6px 14px rgba(37,99,235,.35); }
+  .step.active .lbl { color:var(--blue); }
+  .step .line { display:none; }
+  .steps .conn { flex:1; height:2px; background:#e8ecf2; margin-top:23px; }
+  .steps .conn.active { background:var(--blue); }
+
+  /* tables */
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:12px; letter-spacing:.5px; color:#6b7a91;
+       font-weight:600; background:#f7f9fc; padding:12px 16px;
+       border-bottom:1px solid var(--line); }
+  td { padding:13px 16px; border-bottom:1px solid var(--line); font-size:14px;
+       vertical-align:middle; }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr:hover { background:#fafbfd; }
+  .thumb { width:42px; height:42px; object-fit:cover; border-radius:9px;
+           border:1px solid var(--line); background:#f1f5f9; display:block; }
+  .visitor-cell { display:flex; align-items:center; gap:12px; font-weight:600; }
+  .visitor-cell .ph { width:42px; height:42px; border-radius:9px; background:#eef2f9;
+                      display:flex; align-items:center; justify-content:center;
+                      color:#94a3b8; font-size:17px; overflow:hidden; }
+  .muted-row td { text-align:center; color:var(--muted-2); padding:34px 16px; }
+  .btn-ghost { background:#fff; border:1px solid var(--line); color:var(--ink);
+               padding:9px 17px; border-radius:9px; font-size:13.5px; cursor:pointer;
+               font-weight:600; }
+  .btn-ghost:hover { border-color:var(--blue); color:var(--blue); }
+  .btn-ghost.blue { background:var(--blue); border-color:var(--blue); color:#fff; }
+  .btn-ghost.blue:hover { background:var(--blue-hover); color:#fff; }
+  .btn-mini { background:#fff; border:1px solid var(--line); border-radius:8px;
+              padding:6px 12px; font-size:12.5px; cursor:pointer; }
+  .btn-mini:hover { border-color:var(--bad); color:var(--bad); }
+  .section-head { display:flex; justify-content:space-between; align-items:center;
+                  margin-bottom:18px; gap:12px; flex-wrap:wrap; }
+
+  .view { display:none; }
+  .view.active { display:block; }
 </style>
 </head>
 <body>
-<header>
-  <h1>VC CABIN &mdash; VISITOR MONITORING DASHBOARD</h1>
-  <div class="status"><span class="dot" id="dot"></span><span id="pipe-state">connecting&hellip;</span> &nbsp;|&nbsp; <span id="pipe-source"></span></div>
-</header>
+<div class="layout">
 
-<main>
-  <div class="stats">
-    <div class="stat"><b id="s-persons">0</b><span>Enrolled</span></div>
-    <div class="stat"><b id="s-today">0</b><span>Entries Today</span></div>
-    <div class="stat"><b id="s-alerts">0</b><span>Pending Alerts</span></div>
-    <div class="stat"><b id="s-frames">0</b><span>Frames Processed</span></div>
-  </div>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">VC</div>
+      <div><h1>VC Cabin</h1><p>Face Recognition</p></div>
+    </div>
 
-  <div class="alert-card" id="alert-card">
-    <h2>VC CABIN VISITOR ALERT</h2>
-    <div class="unknown-banner" id="unknown-banner">Unknown / Manual Verification Required</div>
-    <div class="alert-body">
-      <img class="alert-photo" id="a-photo" alt="Visitor Photograph">
-      <div class="alert-info">
-        <div class="row"><b>Name</b> <span id="a-name"></span></div>
-        <div class="row"><b>Category</b> <span id="a-role"></span></div>
-        <div class="row"><b>Department</b> <span id="a-dept"></span></div>
-        <div class="row"><b>ID</b> <span id="a-id"></span></div>
-        <div class="row"><b>Time</b> <span id="a-time"></span></div>
-        <div class="row"><b>Recognition</b> <span class="badge" id="a-result"></span></div>
-        <div class="row"><b>Confidence</b> <span id="a-conf"></span></div>
+    <nav class="nav" id="nav">
+      <a href="#/dashboard" data-view="dashboard" class="active">
+        <span class="ico">&#9638;</span> Dashboard</a>
+      <a href="#/logs" data-view="logs">
+        <span class="ico">&#9673;</span> Visitor Logs</a>
+      <a href="#/people" data-view="people">
+        <span class="ico">&#128101;</span> Students &amp; Staff</a>
+      <a href="#/notifications" data-view="notifications">
+        <span class="ico">&#128276;</span> Notifications
+        <span class="count" id="nav-count" style="display:none">0</span></a>
+    </nav>
+
+    <div class="spacer"></div>
+
+    <div class="sys-card">
+      <span class="dot" id="dot"></span>
+      <div><b id="sys-title">Connecting&hellip;</b>
+           <small id="sys-sub">Recognition system starting</small></div>
+    </div>
+    <div class="side-foot">AI Prototype &bull; MCA Project</div>
+  </aside>
+
+  <main>
+    <!-- ================================================== DASHBOARD -->
+    <section class="view active" id="view-dashboard">
+      <div class="grid2">
+        <div class="card">
+          <div class="drop" id="drop">
+            <h3>Upload visitor image</h3>
+            <p>Select a JPG or PNG image containing a Student or Staff member.</p>
+            <input type="file" id="img-input" accept="image/*" hidden>
+            <button class="btn btn-blue" id="choose-btn">Choose Image</button>
+            <div class="file-note" id="file-note">No image selected</div>
+          </div>
+          <div class="drop-err" id="drop-err"></div>
+          <button class="btn btn-dark" id="analyze-btn">
+            Analyze Visitor Image <span>&rarr;</span></button>
+        </div>
+
+        <div class="card result-card">
+          <div class="result-empty" id="result-empty">
+            <div class="avatar">&#128100;</div>
+            <h3>No visitor detected</h3>
+            <p>Upload an image to begin face detection and recognition.</p>
+          </div>
+          <div class="result-body" id="result-body">
+            <div class="result-top">
+              <img id="r-img" alt="Visitor snapshot">
+              <div>
+                <p class="name" id="r-name">&mdash;</p>
+                <span class="pill" id="r-pill">&mdash;</span>
+              </div>
+            </div>
+            <div class="kv">
+              <b>Category</b>   <span id="r-role">&mdash;</span>
+              <b>Department</b> <span id="r-dept">&mdash;</span>
+              <b>ID</b>         <span id="r-eid">&mdash;</span>
+              <b>Confidence</b> <span id="r-conf">&mdash;</span>
+              <b>Faces</b>      <span id="r-faces">&mdash;</span>
+            </div>
+            <div class="conf-bar"><i id="r-bar"></i></div>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="actions">
-      <button class="ack" id="ack-btn">Acknowledge Visitor</button>
-      <div class="others" id="others"></div>
-    </div>
-  </div>
 
-  <div class="panel">
-    <h3>ENTRY LOG &nbsp;<a class="enroll-link" href="/enroll">+ Enroll a person</a></h3>
-    <table id="entry-table">
-      <thead><tr><th>Photo</th><th>Time</th><th>Name</th><th>Category</th><th>Department</th><th>ID</th><th>Result</th><th>Confidence</th></tr></thead>
-      <tbody id="log-body"><tr><td colspan="8" class="muted">No entries yet</td></tr></tbody>
-    </table>
-  </div>
-</main>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Notifications</h2><p class="sub">Latest visitor alerts</p></div>
+            <span class="count-chip" id="n-count">0</span>
+          </div>
+          <div id="notif-dash"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Recognition Workflow</h2>
+                 <p class="sub">System processing pipeline</p></div>
+          </div>
+          <div class="steps" id="steps">
+            <div class="step active" data-step="1"><div class="n">01</div>
+              <div class="lbl">Image</div></div>
+            <div class="conn"></div>
+            <div class="step" data-step="2"><div class="n">02</div>
+              <div class="lbl">Detection</div></div>
+            <div class="conn"></div>
+            <div class="step" data-step="3"><div class="n">03</div>
+              <div class="lbl">Recognition</div></div>
+            <div class="conn"></div>
+            <div class="step" data-step="4"><div class="n">04</div>
+              <div class="lbl">Database</div></div>
+            <div class="conn"></div>
+            <div class="step" data-step="5"><div class="n">05</div>
+              <div class="lbl">Notification</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">
+          <div><h2>Recent Visitors</h2>
+               <p class="sub">Latest recognized entries</p></div>
+          <button class="btn-ghost" data-goto="logs">View All &rarr;</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Visitor</th><th>Category</th><th>Department</th>
+              <th>ID</th><th>Time</th><th>Status</th>
+            </tr></thead>
+            <tbody id="recent-body">
+              <tr class="muted-row"><td colspan="6">
+                No visitor records yet. Upload an image to start.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================== LOGS -->
+    <section class="view" id="view-logs">
+      <div class="card">
+        <div class="section-head">
+          <div><h2>Visitor Logs</h2>
+               <p class="sub">Full entry history from the recognition pipeline</p></div>
+          <button class="btn-ghost" onclick="refreshAll()">&#8635; Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Photo</th><th>Visitor</th><th>Category</th><th>Department</th>
+              <th>ID</th><th>Time</th><th>Status</th><th>Confidence</th>
+            </tr></thead>
+            <tbody id="logs-body">
+              <tr class="muted-row"><td colspan="8">No entries yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================== PEOPLE -->
+    <section class="view" id="view-people">
+      <div class="card">
+        <div class="section-head">
+          <div><h2>Students &amp; Staff</h2>
+               <p class="sub">Enrolled identities in the recognition gallery</p></div>
+          <button class="btn-ghost blue" onclick="location.href='/enroll'">
+            + Enroll Person</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>#</th><th>Name</th><th>Category</th><th>Department</th>
+              <th>ID</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody id="people-body">
+              <tr class="muted-row"><td colspan="7">No persons enrolled yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================== NOTIFICATIONS -->
+    <section class="view" id="view-notifications">
+      <div class="card">
+        <div class="section-head">
+          <div><h2>Notifications</h2>
+               <p class="sub">Unacknowledged visitor alerts</p></div>
+          <button class="btn-ghost" id="ack-all">Mark all read</button>
+        </div>
+        <div id="notif-full"></div>
+      </div>
+    </section>
+  </main>
+</div>
 
 <script>
-function fmtTime(iso) {
-  if (!iso) return "";
+/* ------------------------------------------------------------- helpers */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtTime = iso => {
+  if (!iso) return "-";
   const d = new Date(iso);
-  return isNaN(d) ? iso : d.toLocaleString();
-}
+  return isNaN(d) ? iso :
+    d.toLocaleDateString() + " " + d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+};
+const pillHtml = result => {
+  const ok = result === "MATCHED";
+  return `<span class="pill ${ok ? "ok" : "bad"}">${esc(result)}</span>`;
+};
+const confPct = c => c == null ? "-" : (c * 100).toFixed(1) + "%";
 
+/* --------------------------------------------------------- navigation */
+function showView(name) {
+  document.querySelectorAll(".view").forEach(v =>
+    v.classList.toggle("active", v.id === "view-" + name));
+  document.querySelectorAll("#nav a").forEach(a =>
+    a.classList.toggle("active", a.dataset.view === name));
+  if (name === "logs")        renderLogs();
+  if (name === "people")      renderPeople();
+  if (name === "notifications") renderNotifs();
+}
+function routeFromHash() {
+  const name = (location.hash.replace(/^#\/?/, "") || "dashboard");
+  showView(["dashboard","logs","people","notifications"].includes(name)
+    ? name : "dashboard");
+}
+window.addEventListener("hashchange", routeFromHash);
+document.querySelectorAll("[data-goto]").forEach(b =>
+  b.addEventListener("click", () => location.hash = "#/" + b.dataset.goto));
+
+/* ------------------------------------------------------------- status */
 async function renderStatus() {
   try {
     const s = await (await fetch("/api/status")).json();
-    document.getElementById("dot").className = "dot" + (s.running ? " on" : "");
-    document.getElementById("pipe-state").textContent =
-      s.running ? "RUNNING" : (s.state || "stopped").toUpperCase();
-    document.getElementById("pipe-source").textContent = s.source || "";
-    if (s.stats) {
-      document.getElementById("s-persons").textContent = s.stats.persons;
-      document.getElementById("s-today").textContent = s.stats.entries_today;
-      document.getElementById("s-alerts").textContent = s.stats.pending_alerts;
-    }
-    document.getElementById("s-frames").textContent = s.frames || 0;
+    $("dot").className = "dot" + (s.running ? " on" : "");
+    $("sys-title").textContent = s.running ? "System Online" : "System Idle";
+    const stats = s.stats || {};
+    $("sys-sub").textContent = s.running
+      ? `${stats.entries_today ?? 0} entries today · ${stats.persons ?? 0} enrolled`
+      : (s.state || "Recognition system ready");
   } catch (e) {}
 }
 
+/* ------------------------------------------------------- notifications */
+function notifHtml(a) {
+  const photo = a.snapshot_url
+    ? `<img src="${esc(a.snapshot_url)}" alt="">`
+    : `<div class="ph" style="width:46px;height:46px;border-radius:9px;
+         background:#e8edf5;display:flex;align-items:center;justify-content:center">&#128100;</div>`;
+  return `<div class="notif">
+    ${photo}
+    <div class="body">
+      <b>${esc(a.name)} ${pillHtml(a.result)}</b>
+      <div class="m">${esc(a.role || "Visitor")}${a.department ? " · " + esc(a.department) : ""}
+        ${a.confidence_pct != null ? " · " + a.confidence_pct + "%" : ""}
+        · ${fmtTime(a.recognized_at)}</div>
+    </div>
+    <button class="ack" data-ack="${a.alert_id}">Acknowledge</button>
+  </div>`;
+}
+function wireAck(root) {
+  root.querySelectorAll("[data-ack]").forEach(btn =>
+    btn.onclick = async () => {
+      await fetch(`/api/alerts/${btn.dataset.ack}/ack`, {method:"POST"});
+      refreshAll();
+    });
+}
 async function renderAlerts() {
   try {
     const alerts = await (await fetch("/api/alerts")).json();
-    const card = document.getElementById("alert-card");
-    if (!alerts.length) { card.style.display = "none"; return; }
-    const a = alerts[0];
-    card.style.display = "block";
-    document.getElementById("a-photo").src = a.snapshot_url || "";
-    document.getElementById("a-name").textContent = a.name;
-    document.getElementById("a-role").textContent = a.role || "Visitor";
-    document.getElementById("a-dept").textContent = a.department || "-";
-    document.getElementById("a-id").textContent = a.external_id || "-";
-    document.getElementById("a-time").textContent = (a.recognized_at || "").replace("T", " ");
-    const badge = document.getElementById("a-result");
-    badge.textContent = a.result;
-    badge.className = "badge " + (a.result === "MATCHED" ? "ok" : "bad");
-    document.getElementById("a-conf").textContent =
-      a.confidence_pct != null ? a.confidence_pct + "%" : "-";
-    document.getElementById("unknown-banner").style.display =
-      a.result === "MATCHED" ? "none" : "block";
-    document.getElementById("others").textContent =
-      alerts.length > 1 ? (alerts.length - 1) + " more unacknowledged alert(s)" : "";
-    document.getElementById("ack-btn").onclick = async () => {
-      await fetch("/api/alerts/" + a.alert_id + "/ack", { method: "POST" });
-      renderAlerts();
-    };
+    const n = alerts.length;
+    $("n-count").textContent = n;
+    $("nav-count").style.display = n ? "flex" : "none";
+    $("nav-count").textContent = n;
+    const empty = `<div class="empty-box">
+      <span class="bell">&#128276;</span>
+      <b>No new notifications</b>
+      <span>Visitor alerts will appear here after recognition.</span></div>`;
+    const dash = $("notif-dash");
+    dash.innerHTML = n ? alerts.slice(0, 3).map(notifHtml).join("") : empty;
+    wireAck(dash);
+    const full = $("notif-full");
+    full.innerHTML = n ? alerts.map(notifHtml).join("") : empty;
+    wireAck(full);
   } catch (e) {}
 }
+$("ack-all").onclick = async () => {
+  await fetch("/api/alerts/ack_all", {method:"POST"});
+  refreshAll();
+};
 
-async function renderEntries() {
+/* ------------------------------------------------------------- tables */
+function visitorCell(e) {
+  const ph = e.snapshot_url
+    ? `<img class="thumb" src="${esc(e.snapshot_url)}" alt="">`
+    : `<span>&#128100;</span>`;
+  return `<div class="visitor-cell"><span class="ph">${ph}</span>${esc(e.name)}</div>`;
+}
+async function renderRecent() {
   try {
-    const rows = await (await fetch("/api/entries?limit=25")).json();
-    const tbody = document.querySelector("#entry-table tbody");
+    const rows = await (await fetch("/api/entries?limit=6")).json();
+    const tb = $("recent-body");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="muted">No entries yet</td></tr>';
+      tb.innerHTML = `<tr class="muted-row"><td colspan="6">
+        No visitor records yet. Upload an image to start.</td></tr>`;
       return;
     }
-    tbody.innerHTML = rows.map(e => `
-      <tr>
-        <td>${e.snapshot_url ? `<img class="thumb" src="${e.snapshot_url}">` : ""}</td>
-        <td>${(e.recognized_at || "").replace("T", " ")}</td>
-        <td>${e.name}</td>
-        <td>${e.role || "-"}</td>
-        <td>${e.department || "-"}</td>
-        <td>${e.external_id || "-"}</td>
-        <td><span class="badge ${e.result === "MATCHED" ? "ok" : "bad"}">${e.result}</span></td>
-        <td>${e.confidence != null ? (e.confidence * 100).toFixed(1) + "%" : "-"}</td>
-      </tr>`).join("");
+    tb.innerHTML = rows.map(e => `<tr>
+      <td>${visitorCell(e)}</td>
+      <td>${esc(e.role || "-")}</td>
+      <td>${esc(e.department || "-")}</td>
+      <td>${esc(e.external_id || "-")}</td>
+      <td>${fmtTime(e.recognized_at)}</td>
+      <td>${pillHtml(e.result)}</td>
+    </tr>`).join("");
+  } catch (e) {}
+}
+async function renderLogs() {
+  try {
+    const rows = await (await fetch("/api/entries?limit=100")).json();
+    const tb = $("logs-body");
+    if (!rows.length) {
+      tb.innerHTML = `<tr class="muted-row"><td colspan="8">No entries yet.</td></tr>`;
+      return;
+    }
+    tb.innerHTML = rows.map(e => `<tr>
+      <td>${e.snapshot_url
+        ? `<img class="thumb" src="${esc(e.snapshot_url)}" alt="">` : "-"}</td>
+      <td><b>${esc(e.name)}</b></td>
+      <td>${esc(e.role || "-")}</td>
+      <td>${esc(e.department || "-")}</td>
+      <td>${esc(e.external_id || "-")}</td>
+      <td>${fmtTime(e.recognized_at)}</td>
+      <td>${pillHtml(e.result)}</td>
+      <td>${confPct(e.confidence)}</td>
+    </tr>`).join("");
+  } catch (e) {}
+}
+async function renderPeople() {
+  try {
+    const rows = await (await fetch("/api/persons")).json();
+    const tb = $("people-body");
+    if (!rows.length) {
+      tb.innerHTML = `<tr class="muted-row"><td colspan="7">
+        No persons enrolled yet.</td></tr>`;
+      return;
+    }
+    tb.innerHTML = rows.map(p => `<tr>
+      <td>#${p.id}</td>
+      <td><b>${esc(p.name)}</b></td>
+      <td>${esc(p.role || "-")}</td>
+      <td>${esc(p.department || "-")}</td>
+      <td>${esc(p.external_id || "-")}</td>
+      <td>${p.status === "active"
+        ? '<span class="pill ok">ACTIVE</span>'
+        : '<span class="pill warn">INACTIVE</span>'}</td>
+      <td>${p.status === "active"
+        ? `<button class="btn-mini" data-deact="${p.id}">Deactivate</button>` : ""}</td>
+    </tr>`).join("");
+    tb.querySelectorAll("[data-deact]").forEach(btn =>
+      btn.onclick = async () => {
+        await fetch(`/api/persons/${btn.dataset.deact}/deactivate`, {method:"POST"});
+        renderPeople(); renderStatus();
+      });
   } catch (e) {}
 }
 
-async function tick() {
-  await Promise.all([renderStatus(), renderAlerts(), renderEntries()]);
+/* ----------------------------------------------------- image analyze */
+let chosenFile = null;
+$("choose-btn").onclick = () => $("img-input").click();
+$("img-input").onchange = e => {
+  chosenFile = e.target.files[0] || null;
+  $("file-note").textContent = chosenFile ? chosenFile.name : "No image selected";
+  $("drop").classList.toggle("has-file", !!chosenFile);
+  $("drop-err").textContent = "";
+};
+$("drop").addEventListener("dragover", e => { e.preventDefault();
+  $("drop").classList.add("has-file"); });
+$("drop").addEventListener("dragleave", () =>
+  $("drop").classList.toggle("has-file", !!chosenFile));
+$("drop").addEventListener("drop", e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f && f.type.startsWith("image/")) {
+    chosenFile = f;
+    $("file-note").textContent = f.name;
+    $("drop").classList.add("has-file");
+    $("drop-err").textContent = "";
+  }
+});
+
+function setWorkflowStep(n) {
+  document.querySelectorAll("#steps .step").forEach(s =>
+    s.classList.toggle("active", +s.dataset.step === n));
+  document.querySelectorAll("#steps .conn").forEach((c, i) =>
+    c.classList.toggle("active", i + 1 < n));
+}
+function resetWorkflow() { setWorkflowStep(1); }
+
+function showResult(r) {
+  $("result-empty").style.display = "none";
+  $("result-body").style.display = "block";
+  $("r-img").src = r.snapshot_url || "";
+  $("r-name").textContent = r.name || "Unknown";
+  const pill = $("r-pill");
+  pill.textContent = r.result;
+  pill.className = "pill " + (r.result === "MATCHED" ? "ok" : "bad");
+  $("r-role").textContent = r.role || "Visitor";
+  $("r-dept").textContent = r.department || "-";
+  $("r-eid").textContent  = r.external_id || "-";
+  $("r-conf").textContent = r.confidence_pct + "%";
+  $("r-faces").textContent = r.faces ?? "-";
+  requestAnimationFrame(() =>
+    $("r-bar").style.width = Math.max(0, Math.min(100, r.confidence_pct)) + "%");
 }
 
-tick();
-setInterval(tick, 2000);
+$("analyze-btn").onclick = async () => {
+  const err = $("drop-err");
+  if (!chosenFile) { err.textContent = "Choose an image first."; return; }
+  err.textContent = "";
+  const btn = $("analyze-btn");
+  btn.disabled = true;
+  btn.innerHTML = "Analyzing&hellip;";
+  const timers = [1,2,3,4,5].map(n => setTimeout(() => setWorkflowStep(n), n * 320));
+  try {
+    const fd = new FormData();
+    fd.append("image", chosenFile);
+    const res = await fetch("/api/analyze", {method:"POST", body:fd});
+    const data = await res.json();
+    timers.forEach(clearTimeout);
+    if (data.error) { err.textContent = data.error; return; }
+    if (!data.found) {
+      err.textContent = data.message || "No face detected in the image.";
+      return;
+    }
+    showResult(data);
+    await Promise.all([renderRecent(), renderAlerts(), renderStatus()]);
+  } catch (e) {
+    err.textContent = "Request failed: " + e;
+  } finally {
+    timers.forEach(clearTimeout);
+    resetWorkflow();
+    btn.disabled = false;
+    btn.innerHTML = 'Analyze Visitor Image <span>&rarr;</span>';
+  }
+};
+
+/* ------------------------------------------------------------- ticker */
+async function refreshAll() {
+  await Promise.all([
+    renderStatus(), renderAlerts(), renderRecent(),
+    $("view-logs").classList.contains("active") ? renderLogs() : Promise.resolve(),
+    $("view-people").classList.contains("active") ? renderPeople() : Promise.resolve(),
+  ]);
+}
+routeFromHash();
+refreshAll();
+setInterval(refreshAll, 2500);
 </script>
 </body>
 </html>

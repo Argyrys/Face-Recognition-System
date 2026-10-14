@@ -1,16 +1,19 @@
 """VC Cabin dashboard + enrollment web app (Flask)."""
 
 import argparse
+import datetime
 import os
 import urllib.parse
 
 import cv2
+import numpy as np
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 from database import Database
-from enrollment import enroll
+from enrollment import SNAPSHOT_DIR, enroll
 from face_detection import FaceDetector
-from face_recognition import FaceRecognizer
+from face_recognition import FaceRecognizer, best_match
+from notification import show_toast
 from pipeline import Pipeline
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -76,6 +79,82 @@ def api_entries():
     for e in entries:
         e["snapshot_url"] = f"/static/snapshots/{e['snapshot']}" if e.get("snapshot") else None
     return jsonify(entries)
+
+
+@app.route("/api/analyze", methods=["POST"])
+def api_analyze():
+    """One-shot recognition of an uploaded visitor image."""
+    file = request.files.get("image")
+    if file is None or not file.filename:
+        return jsonify({"error": "No image uploaded."}), 400
+    img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        return jsonify({"error": "Could not decode the image."}), 400
+
+    detector, recognizer = _engine()
+    faces = detector.detect(img)
+    face = FaceDetector.best(faces)
+    if face is None:
+        return jsonify({
+            "found": False, "result": "NO_FACE",
+            "message": "No face detected in the image.",
+        })
+
+    embedding = recognizer.embed(img, face)
+    person_id, score = best_match(embedding, db.gallery())
+    person = db.person(person_id) if person_id is not None else None
+    matched = person is not None and person["status"] == "active"
+
+    snapshot = _save_crop(img, face)
+    if matched:
+        entry_id = db.add_entry(
+            name=person["name"], result="MATCHED", confidence=score,
+            snapshot=snapshot, person_id=person["id"],
+            role=person["role"], department=person["department"],
+            external_id=person["external_id"],
+        )
+        show_toast(
+            "VC Cabin Visitor Alert",
+            f"{person['role']} - {person['department']} - MATCHED "
+            f"{score * 100:.1f}%",
+        )
+    else:
+        person = None
+        entry_id = db.add_entry(
+            name="Unknown", result="UNKNOWN", confidence=score,
+            snapshot=snapshot,
+        )
+        show_toast("VC Cabin Visitor Alert",
+                   "Unknown / Manual Verification Required")
+
+    alert_id = db.add_alert(entry_id)
+    return jsonify({
+        "found": True,
+        "result": "MATCHED" if matched else "UNKNOWN",
+        "name": person["name"] if matched else "Unknown",
+        "role": person["role"] if matched else "Visitor",
+        "department": person["department"] if matched else None,
+        "external_id": person["external_id"] if matched else None,
+        "confidence": round(float(score), 4),
+        "confidence_pct": round(float(score) * 100, 1),
+        "snapshot_url": f"/static/snapshots/{snapshot}",
+        "entry_id": entry_id,
+        "alert_id": alert_id,
+        "faces": 0 if faces is None else int(len(faces)),
+    })
+
+
+def _save_crop(img, face) -> str:
+    x, y, w, h = FaceDetector.box(face)
+    margin = int(max(w, h) * 0.25)
+    h_img, w_img = img.shape[:2]
+    x1, y1 = max(0, x - margin), max(0, y - margin)
+    x2, y2 = min(w_img, x + w + margin), min(h_img, y + h + margin)
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    filename = f"entry_{stamp}.jpg"
+    os.makedirs(SNAPSHOT_DIR, exist_ok=True)
+    cv2.imwrite(os.path.join(SNAPSHOT_DIR, filename), img[y1:y2, x1:x2])
+    return filename
 
 
 # -------------------------------------------------------------- enrollment
