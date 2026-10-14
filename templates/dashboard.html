@@ -185,6 +185,63 @@
 
   .view { display:none; }
   .view.active { display:block; }
+
+  /* --------------------------------------------------- page header */
+  .page-head { display:flex; justify-content:space-between; align-items:flex-start;
+               gap:16px; margin-bottom:22px; }
+  .crumb { color:var(--muted); font-size:13.5px; margin-bottom:6px; }
+  .page-head h1 { margin:0; font-size:28px; letter-spacing:-.4px; }
+  .page-sub { margin:7px 0 0; color:var(--muted); font-size:14.5px; }
+  .pill-green { display:inline-flex; align-items:center; gap:8px; background:#fff;
+                border:1px solid #c9ecd4; color:var(--ok); font-weight:600;
+                font-size:13.5px; padding:9px 16px; border-radius:999px;
+                white-space:nowrap; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .pill-green .dot { width:8px; height:8px; border-radius:50%; background:var(--ok); }
+  .pill-green.off { color:var(--muted); border-color:var(--line); }
+  .pill-green.off .dot { background:#94a3b8; }
+
+  /* ------------------------------------------------------ stat cards */
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:22px;
+           margin-bottom:22px; }
+  @media (max-width:1150px) { .stats { grid-template-columns:repeat(2,1fr); } }
+  .stat { background:var(--card); border:1px solid var(--line);
+          border-radius:var(--radius); padding:22px; display:flex; gap:16px;
+          align-items:center; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .sico { width:54px; height:54px; border-radius:14px; flex:0 0 54px;
+          display:flex; align-items:center; justify-content:center; font-size:24px; }
+  .sico.purple { background:#efeaff; }
+  .sico.green  { background:#dcf7e5; }
+  .sico.blue   { background:#e3ecfd; }
+  .sico.orange { background:#ffeddc; }
+  .stat-lbl  { color:var(--muted); font-size:13.5px; font-weight:600; }
+  .stat-num  { font-size:28px; font-weight:800; line-height:1.25;
+               color:var(--ink); letter-spacing:-.5px; }
+  .stat-sub  { color:var(--muted-2); font-size:12.5px; }
+
+  /* ------------------------------------------------------------ chips */
+  .chip { display:inline-block; font-size:11.5px; font-weight:800;
+          letter-spacing:.7px; padding:6px 12px; border-radius:8px;
+          background:#f1f5f9; color:#64748b; white-space:nowrap; }
+  .chip-blue { background:#e8f0fe; color:var(--blue); }
+  .chip-ok   { background:var(--ok-bg); color:var(--ok); }
+  .chip-bad  { background:var(--bad-bg); color:var(--bad); }
+
+  /* -------------------------------------------------- upload tweaks */
+  .up-circle { width:56px; height:56px; border-radius:50%; background:#eef4ff;
+               color:var(--blue); font-size:26px; font-weight:700;
+               display:flex; align-items:center; justify-content:center;
+               margin:0 auto 16px; }
+  .drop h3 { font-size:16.5px; }
+  .name-row { display:flex; align-items:center; gap:12px; margin-top:14px;
+              flex-wrap:wrap; }
+  .name-row .name { margin:0; font-size:22px; font-weight:800; }
+  .r-photo-wrap img { width:150px; height:150px; object-fit:cover;
+                      border-radius:12px; border:1px solid var(--line);
+                      background:#f1f5f9; display:block; }
+  .r-status { margin-top:16px; font-weight:800; font-size:13px;
+              letter-spacing:.6px; }
+  .r-status.ok  { color:var(--ok); }
+  .r-status.bad { color:var(--bad); }
 </style>
 </head>
 <body>
@@ -203,6 +260,8 @@
         <span class="ico">&#9673;</span> Visitor Logs</a>
       <a href="#/people" data-view="people">
         <span class="ico">&#128101;</span> Students &amp; Staff</a>
+      <a href="/enroll">
+        <span class="ico">&#128196;</span> Register Person</a>
       <a href="#/notifications" data-view="notifications">
         <span class="ico">&#128276;</span> Notifications
         <span class="count" id="nav-count" style="display:none">0</span></a>
@@ -219,12 +278,64 @@
   </aside>
 
   <main>
+    <div class="page-head">
+      <div>
+        <div class="crumb" id="crumb">VC Cabin / Dashboard</div>
+        <h1 id="page-title">Visitor Recognition Dashboard</h1>
+        <p class="page-sub" id="page-sub">Faculty and Student Identification System</p>
+      </div>
+      <div class="pill-green" id="online-pill">
+        <span class="dot"></span><span id="online-text">System Online</span>
+      </div>
+    </div>
+
     <!-- ================================================== DASHBOARD -->
     <section class="view active" id="view-dashboard">
+      <div class="stats">
+        <div class="stat">
+          <div class="sico purple">&#128101;</div>
+          <div>
+            <div class="stat-lbl">Total Visitors</div>
+            <div class="stat-num" id="st-visitors">0</div>
+            <div class="stat-sub">Today's entries</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="sico green">&#10003;</div>
+          <div>
+            <div class="stat-lbl">Recognized</div>
+            <div class="stat-num" id="st-recognized">0</div>
+            <div class="stat-sub">Successful matches</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="sico blue">&#127891;</div>
+          <div>
+            <div class="stat-lbl">Students</div>
+            <div class="stat-num" id="st-students">0</div>
+            <div class="stat-sub">Registered students</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="sico orange">&#128100;</div>
+          <div>
+            <div class="stat-lbl">Staff</div>
+            <div class="stat-num" id="st-staff">0</div>
+            <div class="stat-sub">Registered staff</div>
+          </div>
+        </div>
+      </div>
+
       <div class="grid2">
         <div class="card">
+          <div class="card-head">
+            <div><h2>Visitor Image</h2>
+                 <p class="sub">Upload an image to identify the visitor</p></div>
+            <span class="chip chip-blue">STEP 01</span>
+          </div>
           <div class="drop" id="drop">
-            <h3>Upload visitor image</h3>
+            <div class="up-circle">&uarr;</div>
+            <h3>Upload Visitor Image</h3>
             <p>Select a JPG or PNG image containing a Student or Staff member.</p>
             <input type="file" id="img-input" accept="image/*" hidden>
             <button class="btn btn-blue" id="choose-btn">Choose Image</button>
@@ -236,21 +347,24 @@
         </div>
 
         <div class="card result-card">
+          <div class="card-head">
+            <div><h2>Recognition Result</h2>
+                 <p class="sub">Identified visitor information</p></div>
+            <span class="chip" id="r-chip">NO RESULT</span>
+          </div>
           <div class="result-empty" id="result-empty">
             <div class="avatar">&#128100;</div>
             <h3>No visitor detected</h3>
             <p>Upload an image to begin face detection and recognition.</p>
           </div>
           <div class="result-body" id="result-body">
-            <div class="result-top">
-              <img id="r-img" alt="Visitor snapshot">
-              <div>
-                <p class="name" id="r-name">&mdash;</p>
-                <span class="pill" id="r-pill">&mdash;</span>
-              </div>
+            <div class="r-photo-wrap"><img id="r-img" alt="Visitor snapshot"></div>
+            <div class="r-status" id="r-status">&mdash;</div>
+            <div class="name-row">
+              <p class="name" id="r-name">&mdash;</p>
+              <span class="chip chip-blue" id="r-role-chip">&mdash;</span>
             </div>
             <div class="kv">
-              <b>Category</b>   <span id="r-role">&mdash;</span>
               <b>Department</b> <span id="r-dept">&mdash;</span>
               <b>ID</b>         <span id="r-eid">&mdash;</span>
               <b>Confidence</b> <span id="r-conf">&mdash;</span>
@@ -392,14 +506,29 @@ const pillHtml = result => {
 const confPct = c => c == null ? "-" : (c * 100).toFixed(1) + "%";
 
 /* --------------------------------------------------------- navigation */
+const PAGE_HEAD = {
+  dashboard: ["VC Cabin / Dashboard", "Visitor Recognition Dashboard",
+              "Faculty and Student Identification System"],
+  logs: ["VC Cabin / Visitor Logs", "Visitor Logs",
+         "Complete recognition entry history"],
+  people: ["VC Cabin / Students & Staff", "Students & Staff",
+           "Enrolled identities in the recognition gallery"],
+  notifications: ["VC Cabin / Notifications", "Notifications",
+                  "Unacknowledged visitor alerts"],
+};
+
 function showView(name) {
   document.querySelectorAll(".view").forEach(v =>
     v.classList.toggle("active", v.id === "view-" + name));
   document.querySelectorAll("#nav a").forEach(a =>
     a.classList.toggle("active", a.dataset.view === name));
+  const head = PAGE_HEAD[name] || PAGE_HEAD.dashboard;
+  $("crumb").textContent = head[0];
+  $("page-title").textContent = head[1];
+  $("page-sub").textContent = head[2];
   if (name === "logs")        renderLogs();
   if (name === "people")      renderPeople();
-  if (name === "notifications") renderNotifs();
+  if (name === "notifications") renderAlerts();
 }
 function routeFromHash() {
   const name = (location.hash.replace(/^#\/?/, "") || "dashboard");
@@ -420,6 +549,12 @@ async function renderStatus() {
     $("sys-sub").textContent = s.running
       ? `${stats.entries_today ?? 0} entries today · ${stats.persons ?? 0} enrolled`
       : (s.state || "Recognition system ready");
+    $("online-pill").className = "pill-green" + (s.running ? "" : " off");
+    $("online-text").textContent = s.running ? "System Online" : "System Idle";
+    $("st-visitors").textContent   = stats.entries_today ?? 0;
+    $("st-recognized").textContent = stats.recognized_today ?? 0;
+    $("st-students").textContent   = stats.students ?? 0;
+    $("st-staff").textContent      = stats.staff ?? 0;
   } catch (e) {}
 }
 
@@ -582,12 +717,18 @@ function resetWorkflow() { setWorkflowStep(1); }
 function showResult(r) {
   $("result-empty").style.display = "none";
   $("result-body").style.display = "block";
+  const matched = r.result === "MATCHED";
   $("r-img").src = r.snapshot_url || "";
   $("r-name").textContent = r.name || "Unknown";
-  const pill = $("r-pill");
-  pill.textContent = r.result;
-  pill.className = "pill " + (r.result === "MATCHED" ? "ok" : "bad");
-  $("r-role").textContent = r.role || "Visitor";
+  $("r-role-chip").textContent = r.role || "Visitor";
+  const chip = $("r-chip");
+  chip.textContent = r.result;
+  chip.className = "chip " + (matched ? "chip-ok" : "chip-bad");
+  const status = $("r-status");
+  status.textContent = matched
+    ? "MATCHED — VERIFIED IDENTITY"
+    : "UNKNOWN — MANUAL VERIFICATION REQUIRED";
+  status.className = "r-status " + (matched ? "ok" : "bad");
   $("r-dept").textContent = r.department || "-";
   $("r-eid").textContent  = r.external_id || "-";
   $("r-conf").textContent = r.confidence_pct + "%";

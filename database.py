@@ -189,6 +189,18 @@ class Database:
                 "SELECT COUNT(*) FROM entry_log WHERE date(recognized_at) = date('now','localtime')"
             ),
             "entries_total": q("SELECT COUNT(*) FROM entry_log"),
+            "recognized_today": q(
+                "SELECT COUNT(*) FROM entry_log WHERE result='MATCHED'"
+                " AND date(recognized_at) = date('now','localtime')"
+            ),
+            "students": q(
+                "SELECT COUNT(*) FROM persons"
+                " WHERE status='active' AND role='Student'"
+            ),
+            "staff": q(
+                "SELECT COUNT(*) FROM persons"
+                " WHERE status='active' AND role='Faculty'"
+            ),
             "pending_alerts": q(
                 "SELECT COUNT(*) FROM alerts WHERE acked = 0"
                 " AND created_at >= " + _ALERT_TTL
