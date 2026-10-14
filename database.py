@@ -50,6 +50,11 @@ def _now() -> str:
     return datetime.datetime.now().isoformat(timespec="seconds")
 
 
+# Alerts older than this vanish from notifications without being acked.
+# ISO "T" separator matches _now() so string comparison is correct.
+_ALERT_TTL = "replace(datetime('now','localtime','-1 day'), ' ', 'T')"
+
+
 class Database:
     def __init__(self, path: str = DB_PATH):
         if path != ":memory:":
@@ -155,7 +160,8 @@ class Database:
         rows = self._conn.execute(
             "SELECT a.id AS alert_id, a.acked, a.created_at AS alert_at,"
             " e.* FROM alerts a JOIN entry_log e ON e.id = a.entry_id"
-            " WHERE a.acked = 0 ORDER BY a.id DESC LIMIT 20"
+            " WHERE a.acked = 0 AND a.created_at >= " + _ALERT_TTL +
+            " ORDER BY a.id DESC LIMIT 20"
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -183,5 +189,8 @@ class Database:
                 "SELECT COUNT(*) FROM entry_log WHERE date(recognized_at) = date('now','localtime')"
             ),
             "entries_total": q("SELECT COUNT(*) FROM entry_log"),
-            "pending_alerts": q("SELECT COUNT(*) FROM alerts WHERE acked = 0"),
+            "pending_alerts": q(
+                "SELECT COUNT(*) FROM alerts WHERE acked = 0"
+                " AND created_at >= " + _ALERT_TTL
+            ),
         }
