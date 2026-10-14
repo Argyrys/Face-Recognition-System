@@ -1,7 +1,8 @@
-"""Frame sources: webcam index, video file, or directory of images.
-
-The app targets machines that may not have a webcam, so every path of the
-system also works from recorded video or still images.
+"""Frame sources: webcam index, video file, directory of images, or a
+network video stream URL (e.g. a phone camera served by IP Webcam /
+DroidCam). The app targets machines that may not have a webcam, so every
+path of the system also works from recorded video, still images, or a
+phone camera over the network.
 """
 
 import glob
@@ -13,6 +14,10 @@ import cv2
 
 _IMAGE_EXTS = ("*.jpg", "*.jpeg", "*.png", "*.bmp")
 _IMAGE_INTERVAL = 0.1  # pace still-image sources at ~10 fps
+
+
+def _is_stream(spec: str) -> bool:
+    return spec.startswith(("http://", "https://", "rtsp://", "rtmp://"))
 
 
 class FrameSource:
@@ -38,6 +43,17 @@ class FrameSource:
                 raise RuntimeError(f"cannot open video file: {spec}")
             self._loop = False
             self.label = f"video:{os.path.basename(spec)}"
+        elif _is_stream(self.spec):
+            # Phone / network camera (IP Webcam, DroidCam, RTSP, ...).
+            # These streams drop frames often, so keep _loop=True to force
+            # a reconnect whenever a read fails.
+            self._cap = cv2.VideoCapture(self.spec)
+            if not self._cap.isOpened():
+                raise RuntimeError(
+                    f"cannot open video stream: {self.spec} "
+                    "(is the camera app running and reachable?)"
+                )
+            self.label = f"stream:{self.spec}"
         else:
             index = int(spec)
             self._cap = cv2.VideoCapture(index)

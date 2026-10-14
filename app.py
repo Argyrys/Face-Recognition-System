@@ -232,7 +232,8 @@ def main():
     global pipeline
     parser = argparse.ArgumentParser(description="VC Cabin face recognition dashboard")
     parser.add_argument("--source", default=default_source(),
-                        help="webcam index (0), video file, or image directory")
+                        help="webcam index (0), video file, image directory, "
+                             "or network stream URL (http://... from IP Webcam/DroidCam)")
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--no-toast", action="store_true",
                         help="disable Windows desktop notifications")
