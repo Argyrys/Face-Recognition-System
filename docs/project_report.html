@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI-Based Face Recognition for VC Cabin Entry</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color:#1b2430;
+         font-size: 11pt; line-height: 1.55; margin:0; }
+
+  h1 { font-size: 26pt; color:#0d1526; margin:0 0 4px; line-height:1.2; }
+  h2 { font-size: 15pt; color:#0d1526; margin:26px 0 10px; padding-bottom:6px;
+       border-bottom:2px solid #2563eb; }
+  h3 { font-size: 12pt; color:#1d4ed8; margin:16px 0 6px; }
+  p  { margin: 0 0 9px; }
+  ul,ol { margin: 0 0 10px; padding-left: 20px; }
+  li { margin-bottom: 4px; }
+
+  .cover { height: 252mm; display:flex; flex-direction:column;
+           justify-content:center; page-break-after: always; text-align:center; }
+  .cover .logo { width:74px; height:74px; border-radius:18px; background:#2563eb;
+                 color:#fff; font-weight:800; font-size:27px; display:flex;
+                 align-items:center; justify-content:center; margin:0 auto 20px; }
+  .cover .sub { font-size: 13pt; color:#5b6b87; margin-top:10px; }
+  .cover .tag { display:inline-block; margin-top:22px; padding:7px 17px;
+                border-radius:999px; background:#e8f0fe; color:#1d4ed8;
+                font-size:10pt; font-weight:600; }
+  .cover .meta { margin-top:44px; font-size:10.5pt; color:#64748b; line-height:1.9; }
+
+  table { width:100%; border-collapse: collapse; margin:8px 0 14px; }
+  th { background:#f1f5f9; color:#0f172a; text-align:left; padding:8px 10px;
+       font-size:10pt; border:1px solid #dfe5ee; }
+  td { padding:7px 10px; border:1px solid #e8ecf2; font-size:10pt; vertical-align:top; }
+  tr:nth-child(even) td { background:#fafbfd; }
+  code { background:#f1f5f9; padding:2px 6px; border-radius:4px;
+         font-family: Consolas, monospace; font-size:9.5pt; color:#0d1526; }
+  pre { background:#0d1526; color:#e2e8f0; padding:12px 14px; border-radius:8px;
+        font-family: Consolas, monospace; font-size:9.5pt; overflow:hidden;
+        line-height:1.5; }
+  pre b { color:#7dd3fc; font-weight:600; }
+
+  .cards { display:flex; gap:12px; margin:14px 0; }
+  .card { flex:1; border:1px solid #e2e8f0; border-radius:10px; padding:14px;
+          background:#fbfcfe; }
+  .card .n { font-size:22pt; font-weight:800; color:#2563eb; line-height:1.1; }
+  .card .l { font-size:9.5pt; color:#64748b; text-transform:uppercase;
+             letter-spacing:.6px; margin-top:3px; }
+  .ok   { color:#16a34a; } .bad { color:#dc2626; } .mid { color:#b45309; }
+
+  .note { background:#eff6ff; border-left:4px solid #2563eb; padding:10px 14px;
+          border-radius:0 8px 8px 0; margin:12px 0; font-size:10pt; }
+  .warn { background:#fff7ed; border-left:4px solid #f59e0b; }
+  .good { background:#f0fdf4; border-left:4px solid #16a34a; }
+  .note b { color:#0d1526; }
+
+  .steps { counter-reset: s; margin:10px 0; }
+  .step { position:relative; padding-left:36px; margin-bottom:11px; }
+  .step:before { counter-increment:s; content: counter(s);
+                 position:absolute; left:0; top:1px; width:24px; height:24px;
+                 background:#2563eb; color:#fff; border-radius:50%;
+                 display:flex; align-items:center; justify-content:center;
+                 font-size:10pt; font-weight:700; }
+
+  .pb { page-break-before: always; }
+  .foot { margin-top:26px; padding-top:10px; border-top:1px solid #e2e8f0;
+          font-size:9pt; color:#94a3b8; text-align:center; }
+  .two { display:flex; gap:22px; }
+  .two > div { flex:1; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ COVER -->
+<div class="cover">
+  <div class="logo">VC</div>
+  <h1>AI-Based Face Recognition<br>for VC Cabin Entry</h1>
+  <div class="sub">Faculty and Student Identification System</div>
+  <div class="tag">AI Prototype &bull; MCA Project</div>
+  <div class="meta">
+    <b>Rajat Sharma</b> &nbsp;&bull;&nbsp; MCA-FS &nbsp;&bull;&nbsp; RU-26-01267<br>
+    Software-only prototype &mdash; detects, recognizes, logs and notifies.<br>
+    No door or lock is controlled; the human makes the access decision.
+  </div>
+</div>
+
+<!-- ============================================================ 1 -->
+<h2>1. Problem Statement &amp; Objective</h2>
+<p>A VC (Vice-Chancellor) cabin entry currently has no reliable record of who
+entered and when. Manual register entries are slow, inaccurate and easy to
+forge. The objective is to build a system that identifies students and faculty
+at the entry point automatically.</p>
+
+<div class="note warn"><b>Scope boundary (important):</b> this prototype is
+<b>software only</b>. It detects a face, decides who it is, records it, and
+raises an alert. It <b>never opens a door or controls any lock</b> &mdash; the
+security guard / staff member reviews the alert and physically grants or denies
+access.</div>
+
+<h3>Objectives</h3>
+<ul>
+  <li>Detect faces reliably at the entry point</li>
+  <li>Recognize enrolled students and faculty with a measured confidence</li>
+  <li>Log every entry with identity, department, ID, time and result</li>
+  <li>Notify staff instantly when a visitor requires attention</li>
+  <li>Work with or without a physical webcam (video, images, or phone camera)</li>
+</ul>
+
+<!-- ============================================================ 2 -->
+<h2>2. System Architecture</h2>
+<p>The system runs entirely on one machine. A background thread pulls frames,
+a Flask server serves the dashboard, and everything is stored in SQLite.</p>
+
+<pre>   <b>FRAME SOURCE</b>                      <b>PROCESSING</b>
+ webcam / video file /  ──────>  YuNet ──> SFace ──> cosine match
+ image folder / phone camera        detect    embed      vs gallery
+ (camera.py)                                                    │
+                                                                 v
+   <b>OUTPUT</b>                       <b>STORAGE</b>        <b>ALERTING</b>
+ dashboard ◄── Flask ──┐         entry_log ◄── SQLite     Windows toast
+ upload-analyze        app.py      persons              dashboard alert
+                       │          alerts               (Ack / Reject)
+                       └──> notification.py ──────────────────┘</pre>
+
+<table>
+<tr><th>Module</th><th>Responsibility</th></tr>
+<tr><td><code>camera.py</code></td><td>Frame sources: webcam index, video file, image folder, or a live network stream (phone camera). Includes a low-latency MJPEG reader.</td></tr>
+<tr><td><code>face_detection.py</code></td><td>YuNet face detection wrapper (ONNX).</td></tr>
+<tr><td><code>face_recognition.py</code></td><td>SFace 128-D embedding + cosine best-match against the gallery, threshold 0.363.</td></tr>
+<tr><td><code>pipeline.py</code></td><td>Background thread: read &rarr; detect &rarr; match &rarr; log &rarr; notify, with duplicate suppression.</td></tr>
+<tr><td><code>database.py</code></td><td>SQLite: persons (with consent), entry log, alerts with acknowledge/reject decisions.</td></tr>
+<tr><td><code>enrollment.py</code></td><td>Consent-gated registration; multiple photos averaged into one embedding.</td></tr>
+<tr><td><code>notification.py</code></td><td>Windows toast notification (fire-and-forget, can be disabled).</td></tr>
+<tr><td><code>app.py</code></td><td>Flask dashboard, enrollment API, image-upload analysis, live MJPEG camera feed.</td></tr>
+<tr><td><code>evaluate.py</code></td><td>Confusion-matrix evaluation &rarr; <code>reports/evaluation.csv</code>.</td></tr>
+</table>
+
+<!-- ============================================================ 3 -->
+<h2>3. Technology Stack</h2>
+<table>
+<tr><th>Layer</th><th>Choice</th><th>Why</th></tr>
+<tr><td>Face detection</td><td>OpenCV <b>YuNet</b> (ONNX, 2023-Mar)</td><td>Accurate on small/angled faces, fast on CPU</td></tr>
+<tr><td>Face recognition</td><td>OpenCV <b>SFace</b> (ONNX, 2021-Dec)</td><td>Compact 128-D embeddings, vendor-published threshold</td></tr>
+<tr><td>Similarity</td><td>Cosine similarity, threshold <b>0.363</b></td><td>OpenCV's published operating point for SFace</td></tr>
+<tr><td>Backend</td><td><b>Flask</b> (Python)</td><td>Simple, local, no external services</td></tr>
+<tr><td>Storage</td><td><b>SQLite</b></td><td>Zero-setup, file-based, fully local</td></tr>
+<tr><td>Frontend</td><td>Server-rendered HTML + vanilla JS</td><td>No build step, no framework, live polling</td></tr>
+<tr><td>Models</td><td>OpenCV Model Zoo (ONNX)</td><td>Openly licensed, runs offline via OpenCV DNN</td></tr>
+<tr><td>Language</td><td>Python 3</td><td>De-facto standard for OpenCV</td></tr>
+</table>
+
+<div class="note"><b>No cloud, no internet required at runtime.</b> Inference runs
+locally through OpenCV DNN. All personal data stays on the machine.</div>
+
+<!-- ============================================================ 4 -->
+<h2 class="pb">4. How the Pipeline Works</h2>
+<div class="steps">
+  <div class="step"><b>Capture a frame.</b> From the configured source (webcam,
+  video, image folder, or phone camera over Wi-Fi).</div>
+  <div class="step"><b>Detect faces (YuNet).</b> Any face found in the frame is
+  a candidate. If no face is found, the frame is skipped silently.</div>
+  <div class="step"><b>Generate an embedding (SFace).</b> The face is
+  <i>aligned</i> using its 5 landmarks, then encoded into a 128-D vector that
+  is L2-normalized.</div>
+  <div class="step"><b>Match against the gallery.</b> The embedding is compared
+  with every enrolled person using cosine similarity. Above <b>0.363</b> it is
+  a match; below it, the system refuses to guess.</div>
+  <div class="step"><b>Log the entry.</b> Name, category (Student/Faculty),
+  department, ID, timestamp, confidence and result are written to
+  <code>entry_log</code>, along with a cropped snapshot of the face.</div>
+  <div class="step"><b>Notify staff.</b> A desktop toast plus a dashboard alert
+  is raised. Staff then <b>Acknowledge</b> or <b>Reject</b> it.</div>
+</div>
+
+<h3>Duplicate suppression</h3>
+<p>A 15-second cooldown (<code>VC_COOLDOWN</code>) prevents the same person (or
+the same unknown visitor) from being logged repeatedly while they stand in
+front of the camera.</p>
+
+<h3>What happens when a face is not recognized</h3>
+<p>The entry is logged as <code>UNKNOWN</code> with the raw cosine score. The
+system <b>never guesses an identity</b> &mdash; a low-confidence frame is always
+flagged for manual verification rather than assigned to the nearest enrolled
+person.</p>
+
+<!-- ============================================================ 5 -->
+<h2>5. Dashboard Features</h2>
+<table>
+<tr><th>Screen</th><th>What it shows</th></tr>
+<tr><td><b>Dashboard</b></td>
+    <td>Four stat cards (Total Visitors, Recognized, Students, Staff), a compact
+    <b>live camera preview</b> with pipeline counters, an upload panel with the
+    5-step recognition workflow, the recognition result card, pending
+    notifications, and the recent visitors table.</td></tr>
+<tr><td><b>Visitor Logs</b></td>
+    <td>Full entry history &mdash; photo, visitor, category, department, ID,
+    time, result and confidence.</td></tr>
+<tr><td><b>Students &amp; Staff</b></td>
+    <td>All enrolled identities with status, and a deactivate action.</td></tr>
+<tr><td><b>Notifications</b></td>
+    <td>Pending visitor alerts with <b>Acknowledge</b> / <b>Reject</b> buttons,
+    plus a "recently resolved" audit trail.</td></tr>
+<tr><td><b>Register Person</b></td>
+    <td>Consent-gated enrollment: name, category, department, ID and one or more
+    photos. Multiple photos are averaged into a single embedding for accuracy.</td></tr>
+</table>
+
+<h3>Two ways to use it</h3>
+<ul>
+  <li><b>Live monitoring</b> &mdash; point a webcam (or a phone camera acting as
+  one) at the entry; the dashboard shows the feed and logs people as they pass.</li>
+  <li><b>Upload &amp; analyze</b> &mdash; drop in a still image and get an instant
+  identity verdict. Useful when no camera is available.</li>
+</ul>
+
+<h3>Notification handling</h3>
+<p>Each alert can be <b>Acknowledged</b> (handled/allowed) or <b>Rejected</b>
+(denied). Both actions clear the notification and record the decision for audit.
+If nobody acts on an alert, it <b>clears itself after 24 hours</b>, so the
+notification list never grows without bound.</p>
+
+<!-- ============================================================ 6 -->
+<h2 class="pb">6. Live Camera &mdash; Phone as a Webcam</h2>
+<p>The built-in webcam on this machine was not available, so the system was
+built to accept a phone camera as a live source. Running an app such as
+<b>IP Webcam</b> or <b>DroidCam</b> on the phone exposes the camera as an MJPEG
+video stream over Wi-Fi, which the system consumes directly.</p>
+
+<pre>py app.py <b>--source http://&lt;phone-ip&gt;:8080/video</b></pre>
+
+<div class="note"><b>Engineering note:</b> OpenCV's FFMPEG backend buffers HTTP
+streams heavily &mdash; a phone camera serving ~15 fps was read at under
+<b>0.25 fps</b> through <code>VideoCapture</code>. A dedicated MJPEG multipart
+reader (<code>camera.MjpegStream</code>) was written to parse the stream
+directly, raising throughput to ~<b>4.3 fps</b> at 640&times;480. The pipeline
+also auto-reconnects if the phone drops off the network.</div>
+
+<!-- ============================================================ 7 -->
+<h2>7. Performance Evaluation</h2>
+
+<h3>Self-test (re-identification)</h3>
+<table>
+<tr><th>Metric</th><th>Value</th><th>Metric</th><th>Value</th></tr>
+<tr><td>Samples</td><td>2</td><td>True Positives (TP)</td><td class="ok">2</td></tr>
+<tr><td>False Positives (FP)</td><td class="ok">0</td><td>False Negatives (FN)</td><td class="ok">0</td></tr>
+<tr><td>Accuracy</td><td class="ok">100%</td><td>Precision</td><td class="ok">100%</td></tr>
+<tr><td>Recall</td><td class="ok">100%</td><td>F1 Score</td><td class="ok">100%</td></tr>
+</table>
+
+<h3>Live video evaluation (20 probe frames from the demo clip)</h3>
+<p>20 frames were sampled at regular intervals from the actual entry video and
+run through the full pipeline:</p>
+<div class="cards">
+  <div class="card"><div class="n ok">10</div><div class="l">Correctly recognized</div></div>
+  <div class="card"><div class="n">10</div><div class="l">Correctly not matched</div></div>
+  <div class="card"><div class="n mid">12</div><div class="l">Faces detected in total</div></div>
+</div>
+
+<table>
+<tr><th>Scenario</th><th>Outcome</th></tr>
+<tr><td>Enrolled person in frame</td><td class="ok">Recognized &mdash; cosine 0.37 to 0.67, comfortably above the 0.363 threshold</td></tr>
+<tr><td>Un-enrolled background face</td><td class="ok">Rejected &mdash; cosine near zero, logged as UNKNOWN for manual review</td></tr>
+<tr><td>Frames with no face (wall/ceiling)</td><td class="ok">Ignored silently &mdash; no log entry, no false alarm</td></tr>
+</table>
+
+<div class="note warn"><b>Observed limitation:</b> matching quality depends on
+how large the face is in the frame. During phone testing at 640&times;480 the
+face was only ~55&ndash;90&nbsp;px wide, which pushed the cosine score down to
+~0.12 and below threshold. Holding the camera closer, or using a higher stream
+resolution (1280&times;720 or above), restores accurate recognition. This is a
+framing issue, not a model failure &mdash; the same face scores 0.48&ndash;0.67
+when properly framed.</div>
+
+<div class="note good"><b>Design strength:</b> the system errs on the side of
+caution. A low-confidence face is logged as UNKNOWN and flagged for a human
+rather than being force-matched to the closest person. In the evaluation above,
+<b>zero false acceptances</b> occurred.</div>
+
+<!-- ============================================================ 8 -->
+<h2>8. Security, Privacy &amp; Ethical Considerations</h2>
+
+<h3>Consent-first enrollment</h3>
+<p>Enrollment requires an explicit consent checkbox. No face is enrolled without
+it. Face embeddings are stored as binary blobs, not photographs.</p>
+
+<h3>Data locality</h3>
+<ul>
+  <li>All data lives locally: <code>database/vc_entry.db</code> plus snapshot
+  images in <code>static/snapshots/</code></li>
+  <li>Nothing is uploaded to any cloud service or third party</li>
+  <li>Full erasure = delete the database folder and snapshots folder</li>
+  <li>Snapshots are capped (240 most recent) and pruned automatically</li>
+</ul>
+
+<h3>Human-in-the-loop by design</h3>
+<p>The software produces a <i>recommendation</i>, never an action. Every
+alert requires a human Acknowledge/Reject, and no physical access control is
+driven by the system.</p>
+
+<h3>Limitations and bias</h3>
+<ul>
+  <li>Accuracy depends on lighting, distance and face size in frame</li>
+  <li>Trained primarily on adult faces &mdash; performance on very young or
+  elderly subjects may differ</li>
+  <li>The enrolled gallery determines who can ever be recognized; unknown faces
+  are never guessed</li>
+</ul>
+
+<h3>What this prototype does NOT do</h3>
+<p class="bad"><b>No door control, no lock control, no automated entry grant.
+</b>The prototype stops at identification, logging and notification.</p>
+
+<!-- ============================================================ 9 -->
+<h2>9. How to Run</h2>
+<pre>python -m pip install -r requirements.txt
+py app.py                            <b># webcam / sample data</b>
+py app.py --source visitor.mp4       <b># a video file</b>
+py app.py --source http://10.0.17.58:8080/video   <b># phone camera</b></pre>
+<p>Then open <code>http://127.0.0.1:5000</code></p>
+
+<table>
+<tr><th>Command</th><th>Purpose</th></tr>
+<tr><td><code>py app.py</code></td><td>Start with the default source</td></tr>
+<tr><td><code>--source</code></td><td>Webcam index, video file, image folder, or stream URL</td></tr>
+<tr><td><code>--port</code></td><td>Change the dashboard port (default 5000)</td></tr>
+<tr><td><code>--no-toast</code></td><td>Disable Windows desktop notifications</td></tr>
+<tr><td><code>py evaluate.py --self-test</code></td><td>Re-run the accuracy evaluation</td></tr>
+<tr><td><code>py enrollment.py --image ... --name ...</code></td><td>Enroll from the command line</td></tr>
+</table>
+
+<h3>Configuration</h3>
+<table>
+<tr><th>Variable</th><th>Default</th><th>Meaning</th></tr>
+<tr><td><code>VC_COOLDOWN</code></td><td>15 (seconds)</td><td>Duplicate-entry suppression window</td></tr>
+<tr><td><code>VC_SOURCE</code></td><td>auto</td><td>Override the default frame source</td></tr>
+<tr><td><code>VC_MAX_WIDTH</code></td><td>960 px</td><td>Frames wider than this are downscaled before detection</td></tr>
+</table>
+
+<!-- ============================================================ 10 -->
+<h2>10. Limitations &amp; Future Work</h2>
+<table>
+<tr><th>Current limitation</th><th>Planned improvement</th></tr>
+<tr><td>Single face tracked per frame (highest scoring)</td><td>Multi-face tracking with per-face independent decisions</td></tr>
+<tr><td>Match quality sensitive to face size in frame</td><td>Higher-resolution capture + multi-frame scoring per visitor</td></tr>
+<tr><td>Manual enrollment only</td><td>Bulk import from the college student database / ID cards</td></tr>
+<tr><td>Flat cosine threshold</td><td>Per-person adaptive thresholds and liveness checks</td></tr>
+<tr><td>Single machine, single camera</td><td>Multi-camera support across cabin entry points, with role-based logins</td></tr>
+<tr><td>Local SQLite</td><td>Optional central server with an audit dashboard for security staff</td></tr>
+<tr><td>Photo-only enrolment (no liveness)</td><td>Anti-spoofing &mdash; blink / head-turn liveness to reject photos and masks</td></tr>
+</table>
+
+<!-- ============================================================ 11 -->
+<h2>11. Project Deliverables</h2>
+<table>
+<tr><th>#</th><th>Deliverable</th><th>Status</th></tr>
+<tr><td>1</td><td>Face detection pipeline (YuNet)</td><td class="ok">Complete</td></tr>
+<tr><td>2</td><td>Face recognition &amp; matching (SFace + cosine)</td><td class="ok">Complete</td></tr>
+<tr><td>3</td><td>Consent-gated enrollment</td><td class="ok">Complete</td></tr>
+<tr><td>4</td><td>Visitor entry logging (SQLite)</td><td class="ok">Complete</td></tr>
+<tr><td>5</td><td>Dashboard with live camera, logs, stats, alerts</td><td class="ok">Complete</td></tr>
+<tr><td>6</td><td>Acknowledge / Reject with 24-hour auto-expiry</td><td class="ok">Complete</td></tr>
+<tr><td>7</td><td>Windows toast notifications</td><td class="ok">Complete</td></tr>
+<tr><td>8</td><td>Phone-as-webcam live streaming</td><td class="ok">Complete</td></tr>
+<tr><td>9</td><td>Accuracy evaluation &amp; metrics report</td><td class="ok">Complete</td></tr>
+<tr><td>10</td><td>Source code on GitHub</td><td class="ok">Complete</td></tr>
+</table>
+
+<h3>Repository</h3>
+<pre>https://github.com/Argyrys/Face-Recognition-System</pre>
+
+<div class="note good" style="margin-top:22px">
+<b>Conclusion:</b> the prototype reliably detects and identifies visitors,
+produces a verifiable audit trail, and alerts staff in real time &mdash; while
+keeping the final access decision firmly in human hands.
+</div>
+
+<div class="foot">AI-Based Face Recognition for VC Cabin Entry &nbsp;&bull;&nbsp;
+Prototype Project Report &nbsp;&bull;&nbsp; MCA-FS</div>
+
+</body>
+</html>
