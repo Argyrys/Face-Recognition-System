@@ -242,6 +242,23 @@
               letter-spacing:.6px; }
   .r-status.ok  { color:var(--ok); }
   .r-status.bad { color:var(--bad); }
+
+  /* ----------------------------------------------------- live camera */
+  .cam-shell { position:relative; background:#0b1220; border-radius:12px;
+               overflow:hidden; aspect-ratio:16/9; margin-top:18px;
+               border:1px solid var(--line); }
+  .cam-shell img { width:100%; height:100%; object-fit:contain; display:block; }
+  .cam-tag { position:absolute; top:12px; left:12px; display:flex;
+             align-items:center; gap:8px; background:rgba(11,18,32,.72);
+             color:#fff; font-size:12.5px; font-weight:600; padding:7px 12px;
+             border-radius:999px; backdrop-filter:blur(4px); }
+  .cam-tag .live { width:8px; height:8px; border-radius:50%; background:#ef4444;
+                   animation:blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+  .cam-off { position:absolute; inset:0; display:flex; align-items:center;
+             justify-content:center; text-align:center; color:#cbd5e1;
+             background:#0b1220; font-size:14.5px; padding:20px; }
+  .cam-off[hidden] { display:none; }
 </style>
 </head>
 <body>
@@ -323,6 +340,19 @@
             <div class="stat-num" id="st-staff">0</div>
             <div class="stat-sub">Registered staff</div>
           </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><h2>Live Camera</h2>
+               <p class="sub">What the recognition pipeline is seeing right now</p></div>
+          <span class="chip" id="cam-source">no source</span>
+        </div>
+        <div class="cam-shell">
+          <img id="cam-feed" src="/api/camera-stream" alt="Live camera feed">
+          <div class="cam-tag" id="cam-tag" hidden><span class="live"></span> LIVE</div>
+          <div class="cam-off" id="cam-off">Camera feed offline &mdash; start the app with a camera, video, or stream source.</div>
         </div>
       </div>
 
@@ -555,8 +585,20 @@ async function renderStatus() {
     $("st-recognized").textContent = stats.recognized_today ?? 0;
     $("st-students").textContent   = stats.students ?? 0;
     $("st-staff").textContent      = stats.staff ?? 0;
+
+    const hasFeed = s.running || (s.frames > 0);
+    $("cam-feed").style.display = hasFeed ? "block" : "none";
+    $("cam-off").hidden = hasFeed;
+    $("cam-tag").hidden = !s.running;
+    $("cam-source").textContent = s.source || "no source";
   } catch (e) {}
 }
+
+/* reconnect the live feed if the server restarted */
+$("cam-feed").onerror = () => setTimeout(() => {
+  const img = $("cam-feed");
+  img.src = "/api/camera-stream?t=" + Date.now();
+}, 2000);
 
 /* ------------------------------------------------------- notifications */
 function notifHtml(a) {

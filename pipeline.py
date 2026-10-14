@@ -17,6 +17,18 @@ from notification import show_toast
 
 COOLDOWN_SECONDS = float(os.environ.get("VC_COOLDOWN", "15"))
 SNAPSHOT_KEEP = 240  # max recent snapshots kept on disk
+PREVIEW_MAX_WIDTH = 720  # width of the JPEG shown in the dashboard preview
+PROCESS_MAX_WIDTH = int(os.environ.get("VC_MAX_WIDTH", "960"))  # detection input
+
+
+def _downscale(frame):
+    """Shrink wide frames so detection and preview stay fast."""
+    h, w = frame.shape[:2]
+    if w > PROCESS_MAX_WIDTH:
+        frame = cv2.resize(
+            frame, (PROCESS_MAX_WIDTH, max(1, int(h * PROCESS_MAX_WIDTH / w)))
+        )
+    return frame
 
 
 class Pipeline(threading.Thread):
@@ -31,6 +43,8 @@ class Pipeline(threading.Thread):
         self._gallery = db.gallery()
         self._gallery_version = db.version
         self._last_logged = {}  # key -> monotonic time
+        self._frame_lock = threading.Lock()
+        self._latest_jpeg = None  # latest preview frame, for the dashboard feed
         self.status = {
             "running": False,
             "state": "starting",
@@ -40,6 +54,24 @@ class Pipeline(threading.Thread):
             "last_event": None,
             "last_frame_at": None,
         }
+
+    # ------------------------------------------------------------- preview
+
+    def latest_jpeg(self):
+        """Most recent frame as JPEG bytes, or None if nothing seen yet."""
+        with self._frame_lock:
+            return self._latest_jpeg
+
+    def _store_preview(self, frame):
+        h, w = frame.shape[:2]
+        if w > PREVIEW_MAX_WIDTH:
+            frame = cv2.resize(
+                frame, (PREVIEW_MAX_WIDTH, max(1, int(h * PREVIEW_MAX_WIDTH / w)))
+            )
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        if ok:
+            with self._frame_lock:
+                self._latest_jpeg = buf.tobytes()
 
     # ------------------------------------------------------------------ run
 
@@ -56,6 +88,8 @@ class Pipeline(threading.Thread):
             self.status["last_frame_at"] = datetime.datetime.now().isoformat(
                 timespec="seconds"
             )
+            frame = _downscale(frame)
+            self._store_preview(frame)
             try:
                 self._process(frame)
             except Exception as exc:  # keep the loop alive on bad frames

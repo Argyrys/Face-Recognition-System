@@ -3,11 +3,12 @@
 import argparse
 import datetime
 import os
+import time
 import urllib.parse
 
 import cv2
 import numpy as np
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
 
 from database import Database
 from enrollment import SNAPSHOT_DIR, enroll
@@ -51,6 +52,39 @@ def api_status():
     status = dict(pipeline.status) if pipeline else {"running": False, "state": "not started"}
     status["stats"] = db.stats()
     return jsonify(status)
+
+
+@app.route("/api/camera-stream")
+def api_camera_stream():
+    """MJPEG feed of whatever the pipeline is looking at (browser <img>)."""
+    if pipeline is None:
+        return "camera feed unavailable: pipeline not started", 503
+
+    boundary = b"vcframe"
+
+    def generate():
+        last = None
+        while True:
+            jpeg = pipeline.latest_jpeg()
+            if jpeg is None:
+                time.sleep(0.25)
+                continue
+            if jpeg != last:
+                last = jpeg
+                yield (
+                    b"--" + boundary + b"\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
+                    + jpeg + b"\r\n"
+                )
+            else:
+                time.sleep(0.05)
+
+    return Response(
+        generate(),
+        mimetype="multipart/x-mixed-replace; boundary=vcframe",
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
 
 
 @app.route("/api/alerts")
