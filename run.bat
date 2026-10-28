@@ -7,7 +7,8 @@ echo   Press Ctrl+C to stop
 echo ============================================
 where py >nul 2>nul
 if %errorlevel%==0 (
-    py app.py
+    rem Prefer 3.14 if installed (3.15+ may lack the project packages)
+    py -3.14 app.py 2>nul || py app.py
 ) else (
     python app.py
 )

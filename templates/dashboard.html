@@ -52,6 +52,22 @@
   .sys-card .dot.on { background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,.18); }
   .sys-card b { display:block; color:#fff; font-size:14px; }
   .sys-card small { color:#8ea0bd; font-size:12.5px; }
+  .reco-card { background:var(--navy-2); border:1px solid rgba(255,255,255,.07);
+               border-radius:12px; padding:12px 16px; display:flex;
+               justify-content:space-between; align-items:center;
+               gap:10px; margin-bottom:16px; }
+  .reco-card b { display:block; color:#fff; font-size:13.5px; }
+  .reco-card small { color:#8ea0bd; font-size:12px; }
+  .switch { position:relative; width:44px; height:24px; flex:0 0 44px;
+            cursor:pointer; }
+  .switch input { opacity:0; width:0; height:0; }
+  .slider { position:absolute; inset:0; background:#334155; border-radius:999px;
+            transition:background .2s; }
+  .slider:before { content:""; position:absolute; width:18px; height:18px;
+                   left:3px; top:3px; background:#e2e8f0; border-radius:50%;
+                   transition:transform .2s; }
+  .switch input:checked + .slider { background:#22c55e; }
+  .switch input:checked + .slider:before { transform:translateX(20px); }
   .side-foot { text-align:center; color:#5b6b87; font-size:12.5px; }
 
   /* ------------------------------------------------------------- main */
@@ -307,6 +323,14 @@
       <span class="dot" id="dot"></span>
       <div><b id="sys-title">Connecting&hellip;</b>
            <small id="sys-sub">Recognition system starting</small></div>
+    </div>
+    <div class="reco-card">
+      <div><b>Face Recognition</b>
+           <small id="reco-state">On &mdash; detecting visitors</small></div>
+      <label class="switch">
+        <input type="checkbox" id="reco-toggle" checked>
+        <span class="slider"></span>
+      </label>
     </div>
     <div class="side-foot">AI Prototype &bull; MCA Project</div>
   </aside>
@@ -596,6 +620,29 @@ document.querySelectorAll("[data-goto]").forEach(b =>
   b.addEventListener("click", () => location.hash = "#/" + b.dataset.goto));
 
 /* ------------------------------------------------------------- status */
+let recoBusy = false;  // ignore poll updates while a toggle POST is in flight
+function setRecoUi(on) {
+  if (recoBusy) return;
+  $("reco-toggle").checked = on;
+  $("reco-state").textContent = on
+    ? "On — detecting visitors"
+    : "Paused — preview only, no logging";
+}
+$("reco-toggle").addEventListener("change", async (e) => {
+  const on = e.target.checked;
+  recoBusy = true;
+  try {
+    const r = await (await fetch("/api/recognition", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({enabled: on})
+    })).json();
+    setRecoUi(r.recognition !== "off");
+  } catch (err) {
+    setRecoUi(!on);  // revert on failure
+  }
+  recoBusy = false;
+});
 async function renderStatus() {
   try {
     const s = await (await fetch("/api/status")).json();
@@ -607,6 +654,7 @@ async function renderStatus() {
       : (s.state || "Recognition system ready");
     $("online-pill").className = "pill-green" + (s.running ? "" : " off");
     $("online-text").textContent = s.running ? "System Online" : "System Idle";
+    setRecoUi(s.recognition !== "off");
     $("st-visitors").textContent   = stats.entries_today ?? 0;
     $("st-recognized").textContent = stats.recognized_today ?? 0;
     $("st-students").textContent   = stats.students ?? 0;

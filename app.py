@@ -54,6 +54,18 @@ def api_status():
     return jsonify(status)
 
 
+@app.route("/api/recognition", methods=["POST"])
+def api_recognition():
+    """Turn recognition on/off from the dashboard (preview keeps streaming)."""
+    if pipeline is None:
+        return jsonify({"ok": False, "error": "pipeline not started"}), 503
+    data = request.get_json(silent=True) or {}
+    if "enabled" not in data:
+        return jsonify({"ok": False, "error": "missing 'enabled' field"}), 400
+    pipeline.set_enabled(bool(data["enabled"]))
+    return jsonify({"ok": True, "recognition": pipeline.status["recognition"]})
+
+
 @app.route("/api/camera-stream")
 def api_camera_stream():
     """MJPEG feed of whatever the pipeline is looking at (browser <img>)."""

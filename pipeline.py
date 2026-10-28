@@ -45,9 +45,12 @@ class Pipeline(threading.Thread):
         self._last_logged = {}  # key -> monotonic time
         self._frame_lock = threading.Lock()
         self._latest_jpeg = None  # latest preview frame, for the dashboard feed
+        self._enabled = threading.Event()
+        self._enabled.set()  # recognition starts ON
         self.status = {
             "running": False,
             "state": "starting",
+            "recognition": "on",
             "source": self.source.label,
             "frames": 0,
             "detections": 0,
@@ -96,6 +99,11 @@ class Pipeline(threading.Thread):
             )
             frame = _downscale(frame)
             self._store_preview(frame)
+            if not self._enabled.is_set():
+                # Recognition paused: preview only, no detect/match/log.
+                self.status["state"] = "recognition paused"
+                continue
+            self.status["state"] = "running"
             try:
                 self._process(frame)
             except Exception as exc:  # keep the loop alive on bad frames
@@ -105,6 +113,20 @@ class Pipeline(threading.Thread):
 
     def stop(self):
         self._stop_event.set()
+
+    # -------------------------------------------------------- on/off toggle
+
+    def set_enabled(self, on: bool):
+        """Turn recognition (detect/match/log/notify) on or off from the dashboard.
+        The camera preview keeps streaming either way."""
+        if on:
+            self._enabled.set()
+        else:
+            self._enabled.clear()
+        self.status["recognition"] = "on" if on else "off"
+
+    def enabled(self) -> bool:
+        return self._enabled.is_set()
 
     # -------------------------------------------------------------- process
 
