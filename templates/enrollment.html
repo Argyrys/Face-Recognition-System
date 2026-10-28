@@ -2,114 +2,295 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Enrollment - VC Cabin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Register Person &mdash; VC Cabin</title>
 <style>
-  :root { --navy:#10233f; --gold:#f2b705; --bg:#f4f6f9; --ok:#1f9d55; --bad:#c0392b; }
+  :root {
+    --navy:#0d1526; --navy-2:#141d33; --blue:#2563eb; --blue-hover:#1d4ed8;
+    --bg:#f4f6f9; --card:#ffffff; --line:#e8ecf2;
+    --ink:#0f172a; --muted:#64748b; --muted-2:#94a3b8;
+    --ok:#16a34a; --ok-bg:#e7f6ec; --bad:#dc2626; --bad-bg:#fdecec;
+    --radius:14px;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:"Segoe UI",Arial,sans-serif; background:var(--bg); color:#1b1b1b; }
-  header { background:var(--navy); color:#fff; padding:14px 24px; display:flex; justify-content:space-between; }
-  header h1 { margin:0; font-size:18px; }
-  header a { color:var(--gold); text-decoration:none; font-weight:600; }
-  main { max-width:1000px; margin:0 auto; padding:20px; }
-  .msg { background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; padding:10px 14px; border-radius:6px; margin-bottom:16px; }
-  .msg.err { background:#fdecea; border-color:#f5c6cb; color:#922; }
-  .panel { background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:18px; overflow:hidden; }
-  .panel h3 { margin:0; padding:12px 16px; background:var(--navy); color:#fff; font-size:15px; }
-  form { padding:18px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weight:600; }
-  input[type=text], select { width:100%; padding:9px; border:1px solid #ccc; border-radius:5px; font-size:14px; }
-  .full { grid-column:1 / -1; }
-  .consent { background:#fffbe6; border:1px solid #ffe58f; padding:10px 12px; border-radius:6px; font-size:13px; }
-  .consent input { margin-right:8px; }
-  button { background:var(--navy); color:#fff; border:none; padding:12px 26px; font-size:15px; border-radius:6px; cursor:pointer; }
-  button:hover { background:#1a3a68; }
-  button.small { padding:5px 12px; font-size:12px; background:#8b1e1e; }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  th, td { padding:9px 14px; text-align:left; border-bottom:1px solid #eee; }
-  th { background:#fafbfc; color:#555; font-size:12px; text-transform:uppercase; }
-  .pill { padding:2px 10px; border-radius:10px; font-size:12px; background:#eee; }
-  .pill.active { background:#d9f2e3; color:#1b5e20; }
-  .muted { color:#999; text-align:center; padding:16px; }
+  html, body { height:100%; }
+  body { margin:0; font-family:"Segoe UI", system-ui, Arial, sans-serif;
+         background:var(--bg); color:var(--ink); font-size:14px; }
+
+  .layout { display:flex; min-height:100vh; }
+
+  /* ---------------------------------------------------------- sidebar */
+  .sidebar { width:310px; flex:0 0 310px; background:var(--navy); color:#e2e8f0;
+             display:flex; flex-direction:column; padding:26px 20px 20px;
+             position:sticky; top:0; height:100vh; }
+  .brand { display:flex; align-items:center; gap:13px; padding:0 6px 24px; }
+  .brand .logo { width:46px; height:46px; border-radius:12px; background:var(--blue);
+                 color:#fff; font-weight:800; font-size:16px; display:flex;
+                 align-items:center; justify-content:center; letter-spacing:.5px; }
+  .brand h1 { margin:0; font-size:20px; color:#fff; }
+  .brand p  { margin:2px 0 0; font-size:13px; color:#8ea0bd; }
+
+  .nav { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .nav a { display:flex; align-items:center; gap:13px; padding:13px 15px;
+           border-radius:10px; color:#c3cee2; text-decoration:none;
+           font-size:15px; font-weight:500; transition:background .15s, color .15s; }
+  .nav a .ico { width:22px; text-align:center; font-size:16px; }
+  .nav a:hover { background:rgba(255,255,255,.06); color:#fff; }
+  .nav a.active { background:var(--blue); color:#fff; font-weight:600;
+                  box-shadow:0 6px 16px rgba(37,99,235,.35); }
+
+  .sidebar .spacer { flex:1; }
+  .sys-card { background:var(--navy-2); border:1px solid rgba(255,255,255,.07);
+              border-radius:12px; padding:14px 16px; display:flex; gap:12px;
+              align-items:center; margin-bottom:16px; }
+  .sys-card .dot { width:10px; height:10px; border-radius:50%; background:#334155;
+                   flex:0 0 10px; }
+  .sys-card .dot.on { background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,.18); }
+  .sys-card b { display:block; color:#fff; font-size:14px; }
+  .sys-card small { color:#8ea0bd; font-size:12.5px; }
+  .side-foot { text-align:center; color:#5b6b87; font-size:12.5px; }
+
+  /* ------------------------------------------------------------- main */
+  main { flex:1; padding:26px 30px 40px; max-width:1100px; }
+  .page-head { display:flex; justify-content:space-between; align-items:flex-start;
+               gap:16px; margin-bottom:22px; }
+  .crumb { font-size:12.5px; color:var(--muted-2); font-weight:600;
+           letter-spacing:.3px; }
+  h1 { margin:4px 0 0; font-size:23px; }
+  .page-sub { margin:5px 0 0; color:var(--muted); font-size:13.5px; }
+
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:var(--radius); padding:24px; margin-bottom:22px;
+          box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .card h2 { margin:0 0 4px; font-size:17px; }
+  .card .card-sub { margin:0 0 20px; color:var(--muted); font-size:13.5px; }
+
+  /* ------------------------------------------------------------- forms */
+  form.enroll { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .field { display:flex; flex-direction:column; }
+  .field.full { grid-column:1 / -1; }
+  label { font-size:13px; color:var(--muted); margin-bottom:6px; font-weight:600; }
+  input[type=text], select { width:100%; padding:11px 13px; border:1px solid #d8dfe9;
+    border-radius:9px; font-size:14px; font-family:inherit; background:#fff;
+    color:var(--ink); transition:border-color .15s, box-shadow .15s; }
+  input[type=text]:focus, select:focus { outline:none; border-color:var(--blue);
+    box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+  input[type=text]::placeholder { color:var(--muted-2); }
+
+  /* file input restyled as a drop zone */
+  .file-drop { border:2px dashed #d3dae5; border-radius:12px; padding:26px 20px;
+               text-align:center; cursor:pointer; transition:border-color .15s, background .15s; }
+  .file-drop:hover { border-color:var(--blue); background:#f7faff; }
+  .file-drop.has-file { border-color:var(--blue); background:#f5f9ff; }
+  .file-drop .big { font-size:26px; color:var(--muted-2); }
+  .file-drop b { display:block; margin:6px 0 3px; font-size:15px; }
+  .file-drop small { color:var(--muted); font-size:12.5px; }
+  .file-drop input[type=file] { display:none; }
+  .file-list { margin-top:10px; font-size:13px; color:var(--blue); font-weight:600; }
+
+  .consent { background:#fffbe6; border:1px solid #ffe58f; border-radius:10px;
+             padding:14px 16px; font-size:13px; display:flex; gap:10px;
+             align-items:flex-start; line-height:1.5; }
+  .consent input { margin-top:2px; }
+  .consent b { color:#8a6d00; }
+
+  .btn { border:none; border-radius:9px; cursor:pointer; font:inherit;
+         font-weight:600; transition:background .15s, transform .05s; }
+  .btn:active { transform:translateY(1px); }
+  .btn-dark { background:#0f172a; color:#fff; padding:15px 30px; font-size:15px;
+              letter-spacing:.2px; display:flex; align-items:center;
+              justify-content:center; gap:10px; }
+  .btn-dark:hover { background:#1e293b; }
+
+  /* ------------------------------------------------------------ banner */
+  .msg { display:flex; gap:10px; align-items:center; padding:13px 16px;
+         border-radius:10px; margin-bottom:20px; font-size:14px; font-weight:600; }
+  .msg.ok { background:var(--ok-bg); color:#14532d; border:1px solid #b7e3c4; }
+  .msg.err { background:var(--bad-bg); color:#7f1d1d; border:1px solid #f3c9c9; }
+
+  /* ------------------------------------------------------------ table */
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th { text-align:left; padding:10px 14px; font-size:11.5px; text-transform:uppercase;
+       letter-spacing:.5px; color:var(--muted); background:#fafbfd;
+       border-bottom:1px solid var(--line); }
+  td { padding:12px 14px; border-bottom:1px solid var(--line); vertical-align:middle;
+       white-space:nowrap; }
+  tr:last-child td { border-bottom:none; }
+  tbody tr:hover { background:#fafbfd; }
+  .who { font-weight:600; color:var(--ink); }
+  .pill { display:inline-block; padding:3px 11px; border-radius:999px;
+          font-size:12px; font-weight:700; }
+  .pill.active { background:var(--ok-bg); color:var(--ok); }
+  .pill.inactive { background:#f1f5f9; color:var(--muted); }
+  .muted { color:var(--muted-2); text-align:center; padding:26px; }
+  .btn-sm { background:#fff; border:1px solid #f3c9c9; color:var(--bad);
+            padding:6px 13px; border-radius:8px; font-size:12.5px; }
+  .btn-sm:hover { background:var(--bad); color:#fff; border-color:var(--bad); }
+
+  @media (max-width:1050px) { .sidebar { width:230px; flex-basis:230px; } }
+  @media (max-width:760px) { form.enroll { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>FACE ENROLLMENT &mdash; VC CABIN</h1>
-  <a href="/">&larr; Back to dashboard</a>
-</header>
-<main>
-  {% if msg %}
-  <div class="msg {% if 'required' in msg or 'no face' in msg or 'consent' in msg or 'cannot' in msg or 'Upload' in msg %}err{% endif %}">{{ msg }}</div>
-  {% endif %}
+<div class="layout">
 
-  <div class="panel">
-    <h3>ENROLL A CONSENTED PERSON</h3>
-    <form method="post" enctype="multipart/form-data">
-      <div>
-        <label>Full name</label>
-        <input type="text" name="name" required placeholder="e.g. Rahul Sharma">
-      </div>
-      <div>
-        <label>Category</label>
-        <select name="role">
-          <option value="Student">Student</option>
-          <option value="Faculty">Faculty</option>
-        </select>
-      </div>
-      <div>
-        <label>Department</label>
-        <input type="text" name="department" required placeholder="e.g. CSE">
-      </div>
-      <div>
-        <label>Student ID / Employee ID</label>
-        <input type="text" name="external_id" required placeholder="e.g. 22CSE045">
-      </div>
-      <div class="full">
-        <label>Photo(s) &mdash; one clear front-facing image; add more for better accuracy</label>
-        <input type="file" name="photos" accept="image/*" multiple required>
-      </div>
-      <div class="consent full">
-        <label style="margin:0;font-weight:400">
-          <input type="checkbox" name="consent" required>
-          I confirm this person has consented to biometric (face) enrollment for this prototype.
-          Data is stored locally and can be deleted on request.
-        </label>
-      </div>
-      <div class="full">
-        <button type="submit">Enroll person</button>
-      </div>
-    </form>
-  </div>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">VC</div>
+      <div><h1>VC Cabin</h1><p>Face Recognition</p></div>
+    </div>
 
-  <div class="panel">
-    <h3>ENROLLED PERSONS</h3>
-    <table>
-      <thead><tr><th>#</th><th>Name</th><th>Category</th><th>Department</th><th>ID</th><th>Consent</th><th>Status</th><th>Enrolled</th><th></th></tr></thead>
-      <tbody>
-        {% for p in persons %}
-        <tr>
-          <td>{{ p.id }}</td>
-          <td>{{ p.name }}</td>
-          <td>{{ p.role }}</td>
-          <td>{{ p.department }}</td>
-          <td>{{ p.external_id }}</td>
-          <td>{{ "Yes" if p.consent else "No" }}</td>
-          <td><span class="pill {{ 'active' if p.status == 'active' else '' }}">{{ p.status }}</span></td>
-          <td>{{ p.created_at }}</td>
-          <td>
-            {% if p.status == 'active' %}
-            <form method="post" action="/api/persons/{{ p.id }}/deactivate" onsubmit="return confirm('Deactivate {{ p.name }}?')">
-              <button class="small">Deactivate</button>
-            </form>
-            {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="9" class="muted">No persons enrolled yet</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</main>
+    <nav class="nav">
+      <a href="/"><span class="ico">&#9638;</span> Dashboard</a>
+      <a href="/#logs"><span class="ico">&#9673;</span> Visitor Logs</a>
+      <a href="/#people"><span class="ico">&#128101;</span> Students &amp; Staff</a>
+      <a href="/enroll" class="active">
+        <span class="ico">&#128196;</span> Register Person</a>
+      <a href="/#notifications"><span class="ico">&#128276;</span> Notifications</a>
+    </nav>
+
+    <div class="spacer"></div>
+
+    <div class="sys-card">
+      <span class="dot" id="dot"></span>
+      <div><b id="sys-title">Connecting&hellip;</b>
+           <small id="sys-sub">Recognition system starting</small></div>
+    </div>
+    <div class="side-foot">AI Prototype &bull; MCA Project</div>
+  </aside>
+
+  <main>
+    <div class="page-head">
+      <div>
+        <div class="crumb">VC Cabin / Register Person</div>
+        <h1>Register Person</h1>
+        <p class="page-sub">Consent-gated enrollment of students and staff</p>
+      </div>
+    </div>
+
+    {% if msg %}
+    <div class="msg {% if 'required' in msg or 'no face' in msg or 'consent' in msg or 'cannot' in msg or 'Upload' in msg %}err{% else %}ok{% endif %}">
+      <span>{{ msg }}</span>
+    </div>
+    {% endif %}
+
+    <!-- ------------------------------------------------------ enroll form -->
+    <div class="card">
+      <h2>Enroll a consented person</h2>
+      <p class="card-sub">One clear front-facing photo works; add more photos to
+        improve matching accuracy (embeddings are averaged).</p>
+      <form class="enroll" method="post" enctype="multipart/form-data">
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" name="name" required placeholder="e.g. Rahul Sharma">
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <select name="role">
+            <option value="Student">Student</option>
+            <option value="Faculty">Faculty</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Department</label>
+          <input type="text" name="department" required placeholder="e.g. CSE">
+        </div>
+        <div class="field">
+          <label>Student ID / Employee ID</label>
+          <input type="text" name="external_id" required placeholder="e.g. RU-26-01267">
+        </div>
+
+        <div class="field full">
+          <label>Photo(s)</label>
+          <label class="file-drop" id="drop">
+            <div class="big">&#128247;</div>
+            <b>Click to choose photos</b>
+            <small>JPG or PNG &bull; front-facing &bull; hold the file straight on</small>
+            <input type="file" name="photos" accept="image/*" multiple required>
+          </label>
+          <div class="file-list" id="file-list"></div>
+        </div>
+
+        <div class="consent full">
+          <input type="checkbox" name="consent" required id="consent-box">
+          <label for="consent-box" style="margin:0;font-weight:400;color:var(--ink)">
+            <b>Consent confirmed.</b> This person has agreed to biometric (face)
+            enrollment for this prototype. Data is stored locally on this machine
+            and can be deleted on request.
+          </label>
+        </div>
+
+        <div class="field full">
+          <button type="submit" class="btn btn-dark" style="width:auto;align-self:flex-start;padding-inline:34px">
+            &#10003; Enroll person
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ------------------------------------------------- enrolled persons -->
+    <div class="card">
+      <h2>Enrolled persons</h2>
+      <p class="card-sub">Everyone the system can currently recognize.</p>
+      <table>
+        <thead><tr>
+          <th>#</th><th>Name</th><th>Category</th><th>Department</th><th>ID</th>
+          <th>Consent</th><th>Status</th><th>Enrolled</th><th></th>
+        </tr></thead>
+        <tbody>
+          {% for p in persons %}
+          <tr>
+            <td>{{ p.id }}</td>
+            <td class="who">{{ p.name }}</td>
+            <td>{{ p.role }}</td>
+            <td>{{ p.department }}</td>
+            <td>{{ p.external_id }}</td>
+            <td>{{ "Yes" if p.consent else "No" }}</td>
+            <td><span class="pill {{ 'active' if p.status == 'active' else 'inactive' }}">{{ p.status }}</span></td>
+            <td>{{ p.created_at[:10] }}</td>
+            <td style="text-align:right">
+              {% if p.status == 'active' %}
+              <form method="post" action="/api/persons/{{ p.id }}/deactivate"
+                    onsubmit="return confirm('Deactivate {{ p.name }}? They will no longer be recognized.')">
+                <button class="btn btn-sm">Deactivate</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9" class="muted">No persons enrolled yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script>
+  // file input: show chosen filenames in the drop zone
+  const drop = document.getElementById("drop");
+  const fileInput = drop.querySelector("input[type=file]");
+  const fileList = document.getElementById("file-list");
+  fileInput.addEventListener("change", () => {
+    const n = fileInput.files.length;
+    drop.classList.toggle("has-file", n > 0);
+    fileList.textContent = n ? (n + (n === 1 ? " photo selected" : " photos selected")) : "";
+  });
+
+  // mirror the dashboard's system status card
+  async function status() {
+    try {
+      const s = await (await fetch("/api/status")).json();
+      document.getElementById("dot").className = "dot" + (s.running ? " on" : "");
+      document.getElementById("sys-title").textContent =
+        s.running ? "System Online" : "System Idle";
+      const stats = s.stats || {};
+      document.getElementById("sys-sub").textContent = s.running
+        ? `${stats.persons ?? 0} enrolled · ${stats.entries_today ?? 0} entries today`
+        : (s.state || "Recognition system ready");
+    } catch (e) {}
+  }
+  status(); setInterval(status, 3000);
+</script>
 </body>
 </html>
