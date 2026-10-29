@@ -6,13 +6,12 @@ import os
 import cv2
 import numpy as np
 
+from config import Config
 from database import Database
 from face_detection import FaceDetector
 from face_recognition import FaceRecognizer
 
-SNAPSHOT_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "static", "snapshots"
-)
+SNAPSHOT_DIR = Config.SNAPSHOT_DIR
 
 
 def _load_image(source):

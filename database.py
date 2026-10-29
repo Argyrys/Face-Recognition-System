@@ -1,4 +1,4 @@
-"""SQLite storage: enrolled persons, entry log, dashboard alerts."""
+"""SQLite storage: enrolled persons, entry log, alerts, audit trail, settings."""
 
 import os
 import sqlite3
@@ -7,9 +7,9 @@ import datetime
 
 import numpy as np
 
-DB_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "database", "vc_entry.db"
-)
+from config import Config
+
+DB_PATH = Config.DB_PATH
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS persons (
@@ -42,6 +42,18 @@ CREATE TABLE IF NOT EXISTS alerts (
     acked      INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     FOREIGN KEY (entry_id) REFERENCES entry_log (id)
+);
+CREATE TABLE IF NOT EXISTS audit_log (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    at     TEXT NOT NULL,
+    actor  TEXT NOT NULL DEFAULT 'admin',
+    action TEXT NOT NULL,
+    detail TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log(at);
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 """
 
@@ -243,3 +255,68 @@ class Database:
                 " AND date(created_at) = date('now','localtime')"
             ),
         }
+
+    # -- audit trail --------------------------------------------------------
+
+    def audit(self, action: str, detail: str = "", actor: str = "admin") -> None:
+        """Append-only record of operator actions (who did what, when)."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO audit_log (at, actor, action, detail) VALUES (?,?,?,?)",
+                (_now(), actor, action, detail),
+            )
+            self._conn.commit()
+
+    def recent_audit(self, limit=100):
+        rows = self._conn.execute(
+            "SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # -- settings (session key / password hash persistence) -----------------
+
+    def get_setting(self, key, default=None):
+        row = self._conn.execute(
+            "SELECT value FROM settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key, value):
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+            self._conn.commit()
+
+    # -- retention ----------------------------------------------------------
+
+    def purge_older_than(self, days: int, audit_days: int = 90) -> dict:
+        """Delete entries, their alerts, and old audit rows past the retention
+        window. Returns the number of rows removed per table."""
+        cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat(
+            timespec="seconds"
+        )
+        audit_cutoff = (
+            datetime.datetime.now() - datetime.timedelta(days=audit_days)
+        ).isoformat(timespec="seconds")
+        with self._lock:
+            # alerts go first so no notification outlives its entry record
+            cur = self._conn.execute(
+                "DELETE FROM alerts WHERE id IN ("
+                " SELECT a.id FROM alerts a JOIN entry_log e ON e.id = a.entry_id"
+                " WHERE e.recognized_at < ?)",
+                (cutoff,),
+            )
+            alerts = cur.rowcount
+            cur = self._conn.execute(
+                "DELETE FROM entry_log WHERE recognized_at < ?", (cutoff,)
+            )
+            entries = cur.rowcount
+            cur = self._conn.execute(
+                "DELETE FROM audit_log WHERE at < ?", (audit_cutoff,)
+            )
+            audit = cur.rowcount
+            self._conn.commit()
+        return {"entries": entries, "alerts": alerts, "audit": audit}
