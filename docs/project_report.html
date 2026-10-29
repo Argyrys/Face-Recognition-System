@@ -75,7 +75,7 @@
 <div class="cover">
   <div class="logo">VC</div>
   <h1>AI-Based Face Recognition<br>for VC Cabin Entry</h1>
-  <div class="sub">Faculty and Student Identification System</div>
+  <div class="sub">Security-Hardened Visitor Identification Appliance</div>
   <div class="tag">AI Prototype &bull; MCA Project</div>
   <div class="meta">
     <b>Rajat Sharma</b> &nbsp;&bull;&nbsp; MCA-FS &nbsp;&bull;&nbsp; RU-26-01267<br>
@@ -89,7 +89,9 @@
 <p>A VC (Vice-Chancellor) cabin entry currently has no reliable record of who
 entered and when. Manual register entries are slow, inaccurate and easy to
 forge. The objective is to build a system that identifies students and faculty
-at the entry point automatically.</p>
+at the entry point automatically &mdash; and that behaves like a real security
+appliance rather than a demo: decisions rest on accumulated evidence, attacks
+are detected, failures are visible, and every action is auditable.</p>
 
 <div class="note warn"><b>Scope boundary (important):</b> this prototype is
 <b>software only</b>. It detects a face, decides who it is, records it, and
@@ -99,40 +101,58 @@ access.</div>
 
 <h3>Objectives</h3>
 <ul>
-  <li>Detect faces reliably at the entry point</li>
-  <li>Recognize enrolled students and faculty with a measured confidence</li>
-  <li>Log every entry with identity, department, ID, time and result</li>
-  <li>Notify staff instantly when a visitor requires attention</li>
+  <li>Detect and <b>track</b> faces reliably at the entry point &mdash; multiple
+  visitors simultaneously, stable identities across frames</li>
+  <li>Recognize enrolled students and faculty on <b>sustained evidence</b>
+  (N-frame confirmation), not a single lucky frame</li>
+  <li>Reject presentation attacks &mdash; printed photos and frozen screens
+  must never be accepted as a live person</li>
+  <li>Log every entry with identity, department, ID, time, result and
+  liveness verdict</li>
+  <li>Notify staff instantly &mdash; on screen, and out-of-band by email or
+  webhook when configured</li>
+  <li>Stay available: detect camera failures and recover automatically</li>
+  <li>Keep a complete, tamper-evident audit trail; keep data local and
+  short-lived</li>
   <li>Work with or without a physical webcam (video, images, or phone camera)</li>
 </ul>
 
 <!-- ============================================================ 2 -->
 <h2>2. System Architecture</h2>
-<p>The system runs entirely on one machine. A background thread pulls frames,
-a Flask server serves the dashboard, and everything is stored in SQLite.</p>
+<p>The system runs entirely on one machine. A background thread pulls frames
+through a six-stage recognition pipeline, a Flask server (Waitress in
+production) serves the login-gated dashboard, and everything is stored in
+SQLite.</p>
 
-<pre>   <b>FRAME SOURCE</b>                      <b>PROCESSING</b>
- webcam / video file /  ──────>  YuNet ──> SFace ──> cosine match
- image folder / phone camera        detect    embed      vs gallery
- (camera.py)                                                    │
-                                                                 v
-   <b>OUTPUT</b>                       <b>STORAGE</b>        <b>ALERTING</b>
- dashboard ◄── Flask ──┐         entry_log ◄── SQLite     Windows toast
- upload-analyze        app.py      persons              dashboard alert
-                       │          alerts               (Ack / Reject)
-                       └──> notification.py ──────────────────┘</pre>
+<pre>   <b>FRAME SOURCE</b>              <b>SECURITY PIPELINE</b>                       <b>OUTPUT</b>
+ webcam / video file /   ──>  YuNet ──> IoU TRACKER ──> N-FRAME CONFIRM  ──┐
+ image folder / phone         detect    (multi-face      (3 consecutive    │
+ camera (camera.py)           per face   stable ids)      agreeing votes)  │
+                                                                          v
+   <b>OUT-OF-BAND</b>                 <b>STORAGE</b>                 LIVENESS GATE ──> cosine match
+ email / webhook  <──┐       entry_log (+liveness)          (motion +       vs gallery
+ (alerter.py)       │       persons / alerts / audit        blink anti-     │
+                    │       snapshots (SQLite + files)      spoof)          v
+   <b>WATCHDOG</b>          └───── notification.py + Flask dashboard / toast / ALERT
+ no frames &rarr; auto-restart with backoff + critical alert</pre>
 
 <table>
 <tr><th>Module</th><th>Responsibility</th></tr>
 <tr><td><code>camera.py</code></td><td>Frame sources: webcam index, video file, image folder, or a live network stream (phone camera). Includes a low-latency MJPEG reader.</td></tr>
 <tr><td><code>face_detection.py</code></td><td>YuNet face detection wrapper (ONNX).</td></tr>
-<tr><td><code>face_recognition.py</code></td><td>SFace 128-D embedding + cosine best-match against the gallery, threshold 0.363.</td></tr>
-<tr><td><code>pipeline.py</code></td><td>Background thread: read &rarr; detect &rarr; match &rarr; log &rarr; notify, with duplicate suppression.</td></tr>
-<tr><td><code>database.py</code></td><td>SQLite: persons (with consent), entry log, alerts with acknowledge/reject decisions.</td></tr>
+<tr><td><code>tracker.py</code></td><td>Greedy IoU multi-face tracker. Gives each visitor a stable track id and accumulates per-track evidence (identity votes, liveness history).</td></tr>
+<tr><td><code>liveness.py</code></td><td>Passive anti-spoofing: landmark-motion + eye-region blink energy &rarr; <code>live / unknown / spoof</code> verdict.</td></tr>
+<tr><td><code>face_recognition.py</code></td><td>SFace 128-D embedding + cosine best-match against the gallery; threshold tunable (<code>VC_MIN_COSINE</code>, default 0.363).</td></tr>
+<tr><td><code>pipeline.py</code></td><td>Background thread: read &rarr; detect &rarr; track &rarr; confirm &rarr; liveness gate &rarr; match &rarr; log &rarr; notify; publishes the per-track workflow snapshot.</td></tr>
+<tr><td><code>alerter.py</code></td><td>Out-of-band alert channels: SMTP email + generic/Discord webhook, per-channel rate limiting, critical-event bypass.</td></tr>
+<tr><td><code>database.py</code></td><td>SQLite: persons (with consent), entry log (with liveness verdicts), alerts with acknowledge/reject decisions, append-only audit log.</td></tr>
+<tr><td><code>backup.py</code></td><td>Consistent SQLite-backup-API archives (database + snapshots + manifest) with pruning and integrity verify.</td></tr>
 <tr><td><code>enrollment.py</code></td><td>Consent-gated registration; multiple photos averaged into one embedding.</td></tr>
 <tr><td><code>notification.py</code></td><td>Windows toast notification (fire-and-forget, can be disabled).</td></tr>
-<tr><td><code>app.py</code></td><td>Flask dashboard, enrollment API, image-upload analysis, live MJPEG camera feed.</td></tr>
+<tr><td><code>app.py</code></td><td>Flask dashboard behind a login gate, enrollment API, image-upload analysis, live MJPEG feed, security headers, camera watchdog.</td></tr>
+<tr><td><code>serve.py</code></td><td>Production entrypoint (Waitress WSGI server).</td></tr>
 <tr><td><code>evaluate.py</code></td><td>Confusion-matrix evaluation &rarr; <code>reports/evaluation.csv</code>.</td></tr>
+<tr><td><code>threshold_sweep.py</code></td><td>Threshold sweep over genuine/imposter pairs &rarr; FAR/FRR report with a proven-safe interval &rarr; <code>reports/threshold_sweep.{csv,md}</code>.</td></tr>
 </table>
 
 <!-- ============================================================ 3 -->
@@ -141,11 +161,15 @@ a Flask server serves the dashboard, and everything is stored in SQLite.</p>
 <tr><th>Layer</th><th>Choice</th><th>Why</th></tr>
 <tr><td>Face detection</td><td>OpenCV <b>YuNet</b> (ONNX, 2023-Mar)</td><td>Accurate on small/angled faces, fast on CPU</td></tr>
 <tr><td>Face recognition</td><td>OpenCV <b>SFace</b> (ONNX, 2021-Dec)</td><td>Compact 128-D embeddings, vendor-published threshold</td></tr>
-<tr><td>Similarity</td><td>Cosine similarity, threshold <b>0.363</b></td><td>OpenCV's published operating point for SFace</td></tr>
-<tr><td>Backend</td><td><b>Flask</b> (Python)</td><td>Simple, local, no external services</td></tr>
+<tr><td>Similarity</td><td>Cosine similarity, threshold tunable (default <b>0.363</b>)</td><td>Vendor operating point, later re-evidenced by our own sweep</td></tr>
+<tr><td>Tracking</td><td>Greedy IoU tracker (custom, <code>tracker.py</code>)</td><td>Stable per-visitor identity across frames without heavy dependencies</td></tr>
+<tr><td>Liveness</td><td>Passive PAD: landmark motion + blink energy (custom)</td><td>No extra model or IR camera needed on plain RGB</td></tr>
+<tr><td>Backend</td><td><b>Flask</b> + <b>Waitress</b> (production)</td><td>Simple, local, no external services</td></tr>
 <tr><td>Storage</td><td><b>SQLite</b></td><td>Zero-setup, file-based, fully local</td></tr>
 <tr><td>Frontend</td><td>Server-rendered HTML + vanilla JS</td><td>No build step, no framework, live polling</td></tr>
 <tr><td>Models</td><td>OpenCV Model Zoo (ONNX)</td><td>Openly licensed, runs offline via OpenCV DNN</td></tr>
+<tr><td>Testing</td><td><b>pytest</b> (45 tests) + <b>GitHub Actions</b> CI</td><td>Regression safety on every push, Python 3.11 &amp; 3.12</td></tr>
+<tr><td>Deployment</td><td><b>Docker</b> image + compose, health-checked</td><td>Repeatable install on a college server</td></tr>
 <tr><td>Language</td><td>Python 3</td><td>De-facto standard for OpenCV</td></tr>
 </table>
 
@@ -153,53 +177,157 @@ a Flask server serves the dashboard, and everything is stored in SQLite.</p>
 locally through OpenCV DNN. All personal data stays on the machine.</div>
 
 <!-- ============================================================ 4 -->
-<h2 class="pb">4. How the Pipeline Works</h2>
+<h2 class="pb">4. How the Recognition Pipeline Works</h2>
 <div class="steps">
   <div class="step"><b>Capture a frame.</b> From the configured source (webcam,
   video, image folder, or phone camera over Wi-Fi).</div>
-  <div class="step"><b>Detect faces (YuNet).</b> Any face found in the frame is
-  a candidate. If no face is found, the frame is skipped silently.</div>
-  <div class="step"><b>Generate an embedding (SFace).</b> The face is
-  <i>aligned</i> using its 5 landmarks, then encoded into a 128-D vector that
-  is L2-normalized.</div>
-  <div class="step"><b>Match against the gallery.</b> The embedding is compared
-  with every enrolled person using cosine similarity. Above <b>0.363</b> it is
-  a match; below it, the system refuses to guess.</div>
-  <div class="step"><b>Log the entry.</b> Name, category (Student/Faculty),
-  department, ID, timestamp, confidence and result are written to
-  <code>entry_log</code>, along with a cropped snapshot of the face.</div>
-  <div class="step"><b>Notify staff.</b> A desktop toast plus a dashboard alert
-  is raised. Staff then <b>Acknowledge</b> or <b>Reject</b> it.</div>
+  <div class="step"><b>Detect all faces (YuNet).</b> Every face in the frame is
+  processed independently &mdash; the system handles multiple visitors at once.
+  Frames with no face are skipped silently.</div>
+  <div class="step"><b>Track across frames (IoU tracker).</b> Each face gets a
+  stable track id; detections are attached to existing tracks by
+  intersection-over-union, so one visitor is one track, not a stream of
+  unrelated frames.</div>
+  <div class="step"><b>Embed the face (SFace).</b> The face is <i>aligned</i>
+  using its 5 landmarks, then encoded into an L2-normalized 128-D vector and
+  matched against the gallery by cosine similarity.</div>
+  <div class="step"><b>N-frame confirmation.</b> A MATCHED or UNKNOWN verdict
+  requires <b>3 consecutive frames agreeing</b> (<code>VC_CONFIRM_FRAMES</code>).
+  One blurred or lucky frame can no longer create or deny a log entry.</div>
+  <div class="step"><b>Liveness gate.</b> Landmark motion and blink energy are
+  accumulated per track. On live sources, a confirmed match that is not
+  verified live is <b>held</b> (up to 20 frames) and then logged unverified; a
+  photo/screen attack is logged as a presentation attack and raises a
+  <b>critical alert</b>.</div>
+  <div class="step"><b>Log the entry.</b> Name, category, department, ID,
+  timestamp, confidence, result <b>and liveness verdict</b> are written to
+  <code>entry_log</code> with a cropped snapshot.</div>
+  <div class="step"><b>Notify staff.</b> Desktop toast + dashboard alert, and
+  email/webhook when configured. Staff then <b>Acknowledge</b> or <b>Reject</b>.</div>
 </div>
 
-<h3>Duplicate suppression</h3>
-<p>A 15-second cooldown (<code>VC_COOLDOWN</code>) prevents the same person (or
-the same unknown visitor) from being logged repeatedly while they stand in
-front of the camera.</p>
+<h3>Live workflow visibility</h3>
+<p>The dashboard shows the pipeline decision process in real time. Each
+tracked face is rendered as a stage strip &mdash; <b>DETECT &rarr; TRACK &rarr;
+CONFIRM &rarr; LIVENESS &rarr; MATCH &rarr; LOG</b> &mdash; green when a stage
+passed, cyan while evidence is accruing, amber while holding, red-blinking on a
+spoof verdict. This makes the ~1&nbsp;second confirmation window visible
+instead of looking like a malfunction, and shows the operator exactly why an
+entry has (or has not) been logged.</p>
 
-<h3>What happens when a face is not recognized</h3>
-<p>The entry is logged as <code>UNKNOWN</code> with the raw cosine score. The
-system <b>never guesses an identity</b> &mdash; a low-confidence frame is always
-flagged for manual verification rather than assigned to the nearest enrolled
-person.</p>
+<div class="two">
+<div>
+<h3>Duplicate suppression</h3>
+<p>A 15-second cooldown (<code>VC_COOLDOWN</code>) prevents the same person
+(or the same unknown visitor) from being logged repeatedly while they stand in
+front of the camera. The cooldown is keyed per identity, so two different
+visitors are never throttled against each other.</p>
+</div>
+<div>
+<h3>When a face is not recognized</h3>
+<p>The entry is logged as <code>UNKNOWN</code> with the raw cosine score &mdash;
+<b>never force-matched</b> to the nearest enrolled person. Unknowns get the
+same N-frame treatment as matches, so detection flicker cannot spam the
+alert list.</p>
+</div>
+</div>
 
 <!-- ============================================================ 5 -->
-<h2>5. Dashboard Features</h2>
+<h2>5. Recognition Security: Evidence, Not One-Shot Decisions</h2>
+
+<h3>Threshold sweep &mdash; an evidenced operating point</h3>
+<p>The SFace vendor default (0.363) is a reasonable start, but it is not a
+measurement on <i>this</i> camera or <i>this</i> gallery.
+<code>threshold_sweep.py</code> measures score distributions &mdash;
+<b>genuine pairs</b> (same identity across augmented cross-condition variants:
+flip, rotation, brightness, blur, scale) versus <b>imposter pairs</b> (every
+cross-identity combination) &mdash; and sweeps the threshold from 0.20 to 0.70,
+reporting FAR, FRR, precision, recall and F1 at each point.</p>
+
+<div class="cards">
+  <div class="card"><div class="n">56</div><div class="l">Genuine pairs</div></div>
+  <div class="card"><div class="n">64</div><div class="l">Imposter pairs</div></div>
+  <div class="card"><div class="n ok">0.21&ndash;0.69</div><div class="l">Proven-safe interval</div></div>
+  <div class="card"><div class="n ok">0.450</div><div class="l">Recommended point</div></div>
+</div>
+
+<table>
+<tr><th>Operating point</th><th>Threshold</th><th>FAR</th><th>FRR</th><th>Recall</th><th>F1</th></tr>
+<tr><td><b>Security</b> (FAR &le; 1%)</td><td><b>0.450</b></td><td class="ok">0.0000</td><td class="ok">0.0000</td><td class="ok">1.000</td><td class="ok">1.000</td></tr>
+<tr><td>Balanced (best F1)</td><td><b>0.450</b></td><td class="ok">0.0000</td><td class="ok">0.0000</td><td class="ok">1.000</td><td class="ok">1.000</td></tr>
+<tr><td>Vendor default (SFace)</td><td>0.363</td><td class="ok">0.0000</td><td class="ok">0.0000</td><td class="ok">1.000</td><td class="ok">1.000</td></tr>
+</table>
+
+<p>Every threshold in <b>[0.21, 0.69]</b> achieved zero false accepts at full
+recall on the measured pairs; the recommendation is the interval midpoint
+(largest margin from both the nearest imposter and the nearest genuine
+score). The vendor default 0.363 sits <i>inside</i> the proven-safe interval,
+so it was kept as the shipped default &mdash; now as an evidenced choice, not
+an assumption. The sweep is operator-tunable
+(<code>VC_MIN_COSINE</code>) and re-runnable on-site with real probe photos.</p>
+
+<div class="note warn"><b>Honest limitation:</b> augmented variants are a
+surrogate for a real second capture session, and 2 identities cannot bound a
+production FAR. The generated report says so, and instructs re-running the
+sweep with probes from the actual installation camera before freezing the
+threshold.</div>
+
+<h3>Passive liveness (anti-spoofing)</h3>
+<p>Per track, two cheap signals are computed from the ordinary RGB feed:</p>
+<ul>
+  <li><b>Landmark motion</b> &mdash; frame-to-frame displacement of the 5
+  YuNet landmarks, normalized by face size (scale- and distance-invariant);</li>
+  <li><b>Blink detection</b> &mdash; Laplacian texture energy of the two eye
+  crops relative to the whole face (lighting-invariant). A blink drops the
+  energy sharply below the personal baseline and back.</li>
+</ul>
+<p>A printed photo or frozen screen shows neither motion nor blinks and is
+judged a <b>spoof</b> &mdash; but only after <b>&ge;10 frames of evidence</b>,
+so a genuinely still visitor is never branded an attacker on 3 frames. In
+<code>enforced</code> mode (the default on live sources) a spoof verdict
+<b>never becomes MATCHED</b>, even for an enrolled person; it is logged as a
+presentation attack with a critical alert. Modes: <code>enforced</code> |
+<code>monitor</code> (label only) | <code>off</code>.</p>
+
+<div class="note warn"><b>Honest limitation:</b> passive single-camera checks
+cannot distinguish a high-quality <b>video replay</b> of a blinking person
+from the real person. The threat model (<code>docs/SECURITY.md</code>)
+documents this and recommends a discretionary guard challenge (ask the
+visitor to turn their head) for higher-risk installations &mdash; which the
+live workflow view and camera feed make easy to supervise.</div>
+
+<!-- ============================================================ 6 -->
+<h2 class="pb">6. Dashboard Features</h2>
+
+<h3>Access control</h3>
+<p>Every page and API (except <code>/login</code>, <code>/health</code> and
+static assets) sits behind a single admin password (<code>VC_ADMIN_PASSWORD</code>;
+generated randomly and printed to the log if unset &mdash; the dashboard is
+never left open). Five failed attempts trigger a 60-second per-IP lockout;
+sessions are HttpOnly/SameSite cookies with a 12-hour lifetime; cross-site
+mutating requests are refused (CSRF defence).</p>
+
 <table>
 <tr><th>Screen</th><th>What it shows</th></tr>
 <tr><td><b>Dashboard</b></td>
-    <td>Four stat cards (Total Visitors, Recognized, Students, Staff), a compact
-    <b>live camera preview</b> with pipeline counters, an upload panel with the
-    5-step recognition workflow, the recognition result card, pending
-    notifications, and the recent visitors table.</td></tr>
+    <td>Four stat cards, the <b>live camera preview</b> with pipeline counters
+    (source, liveness mode, camera age, armed alert channels), the <b>live
+    recognition-workflow panel</b>, a camera-outage banner when degraded, the
+    upload-analyze panel, pending notifications, and the recent visitors
+    table with <b>liveness chips</b>.</td></tr>
 <tr><td><b>Visitor Logs</b></td>
     <td>Full entry history &mdash; photo, visitor, category, department, ID,
-    time, result and confidence.</td></tr>
+    time, result, confidence <b>and liveness verdict</b> (LIVE / UNVERIFIED /
+    SPOOF?).</td></tr>
 <tr><td><b>Students &amp; Staff</b></td>
     <td>All enrolled identities with status, and a deactivate action.</td></tr>
 <tr><td><b>Notifications</b></td>
     <td>Pending visitor alerts with <b>Acknowledge</b> / <b>Reject</b> buttons,
-    plus a "recently resolved" audit trail.</td></tr>
+    spoof events flagged critical, plus a "recently resolved" decision trail.</td></tr>
+<tr><td><b>Audit Trail</b></td>
+    <td>Append-only record of every operator action: logins (including
+    failures), acknowledgements/rejections, enrollments, deactivations,
+    recognition toggles, retention purges, camera outages and restarts.</td></tr>
 <tr><td><b>Register Person</b></td>
     <td>Consent-gated enrollment: name, category, department, ID and one or more
     photos. Multiple photos are averaged into a single embedding for accuracy.</td></tr>
@@ -208,9 +336,10 @@ person.</p>
 <h3>Two ways to use it</h3>
 <ul>
   <li><b>Live monitoring</b> &mdash; point a webcam (or a phone camera acting as
-  one) at the entry; the dashboard shows the feed and logs people as they pass.</li>
-  <li><b>Upload &amp; analyze</b> &mdash; drop in a still image and get an instant
-  identity verdict. Useful when no camera is available.</li>
+  one) at the entry; the dashboard shows the feed, the workflow strip, and logs
+  people as they pass.</li>
+  <li><b>Upload &amp; analyze</b> &mdash; drop in a still image and get an
+  instant identity verdict. Useful when no camera is available.</li>
 </ul>
 
 <h3>Notification handling</h3>
@@ -219,8 +348,54 @@ person.</p>
 If nobody acts on an alert, it <b>clears itself after 24 hours</b>, so the
 notification list never grows without bound.</p>
 
-<!-- ============================================================ 6 -->
-<h2 class="pb">6. Live Camera &mdash; Phone as a Webcam</h2>
+<!-- ============================================================ 7 -->
+<h2>7. Operations: Alerts, Watchdog, Backups, Hardening</h2>
+
+<h3>Out-of-band alert routing</h3>
+<p>On-screen alerts only help someone who is watching. <code>alerter.py</code>
+routes events to an <b>SMTP mailbox</b> and/or a <b>generic webhook</b>
+(Discord/Slack/IFTTT/Zapier-compatible), configured purely by environment
+variables. Delivery is <b>rate-limited per channel</b>
+(<code>VC_ALERT_MIN_INTERVAL</code>, default 60&nbsp;s) so a noisy stream
+cannot flood the guard, while <b>critical events always deliver</b> &mdash;
+suspected spoofing and camera outages. A failing channel (bad credentials,
+network down) is logged and never crashes the pipeline. With no channels
+configured, behavior is exactly as before.</p>
+
+<h3>Camera watchdog</h3>
+<p>A security camera that silently stops is worse than none. The watchdog
+watches frame flow on live sources: <b>no frames for 25&nbsp;seconds</b>
+(<code>VC_STALL_SECONDS</code>) triggers an automatic pipeline restart with
+backoff, a <b>red "camera outage &mdash; entry unmonitored" banner</b> on the
+dashboard, <code>camera.outage</code> / <code>camera.recovered</code> audit
+entries, and a critical alert. The degraded state is visible rather than
+silent.</p>
+
+<h3>Backups</h3>
+<p><code>python backup.py</code> produces a timestamped, compressed archive of
+the database (via SQLite's backup API &mdash; consistent even while the app is
+writing) plus all snapshot images and a manifest with row counts and restore
+steps. Old archives are pruned (<code>VC_BACKUP_KEEP</code>, default 30);
+<code>--verify</code> integrity-checks the live database. The README ships
+Task Scheduler (Windows) and cron (Linux) recipes for daily backups.</p>
+
+<h3>Transport &amp; hardening</h3>
+<ul>
+  <li>Security headers on every response: <code>X-Content-Type-Options:
+  nosniff</code>, <code>X-Frame-Options</code>, <code>Referrer-Policy</code>;
+  API responses are <code>no-store</code>.</li>
+  <li>HTTPS by reverse proxy: the production server (Waitress) deliberately
+  does not terminate TLS itself &mdash; ready-to-use <b>Caddy</b> (automatic
+  certificates) and <b>nginx</b> configurations are documented, with the app
+  bound to localhost behind the proxy.</li>
+  <li>Retention: entries, alerts and snapshots purged after 30 days, audit rows
+  after 90 &mdash; automatic, on startup and every 6 hours.</li>
+  <li><b>45 automated tests</b> (pytest, no camera needed) + GitHub Actions CI
+  on every push (Python 3.11 &amp; 3.12); Docker image with health check.</li>
+</ul>
+
+<!-- ============================================================ 8 -->
+<h2 class="pb">8. Live Camera &mdash; Phone as a Webcam</h2>
 <p>The built-in webcam on this machine was not available, so the system was
 built to accept a phone camera as a live source. Running an app such as
 <b>IP Webcam</b> or <b>DroidCam</b> on the phone exposes the camera as an MJPEG
@@ -233,10 +408,11 @@ streams heavily &mdash; a phone camera serving ~15 fps was read at under
 <b>0.25 fps</b> through <code>VideoCapture</code>. A dedicated MJPEG multipart
 reader (<code>camera.MjpegStream</code>) was written to parse the stream
 directly, raising throughput to ~<b>4.3 fps</b> at 640&times;480. The pipeline
-also auto-reconnects if the phone drops off the network.</div>
+also auto-reconnects if the phone drops off the network, and the watchdog
+restarts it if frames stop altogether.</div>
 
-<!-- ============================================================ 7 -->
-<h2>7. Performance Evaluation</h2>
+<!-- ============================================================ 9 -->
+<h2>9. Performance &amp; Security Evaluation</h2>
 
 <h3>Self-test (re-identification)</h3>
 <table>
@@ -248,8 +424,6 @@ also auto-reconnects if the phone drops off the network.</div>
 </table>
 
 <h3>Live video evaluation (20 probe frames from the demo clip)</h3>
-<p>20 frames were sampled at regular intervals from the actual entry video and
-run through the full pipeline:</p>
 <div class="cards">
   <div class="card"><div class="n ok">10</div><div class="l">Correctly recognized</div></div>
   <div class="card"><div class="n">10</div><div class="l">Correctly not matched</div></div>
@@ -258,37 +432,65 @@ run through the full pipeline:</p>
 
 <table>
 <tr><th>Scenario</th><th>Outcome</th></tr>
-<tr><td>Enrolled person in frame</td><td class="ok">Recognized &mdash; cosine 0.37 to 0.67, comfortably above the 0.363 threshold</td></tr>
+<tr><td>Enrolled person in frame</td><td class="ok">Recognized &mdash; cosine 0.37 to 0.67, above the 0.363 threshold</td></tr>
 <tr><td>Un-enrolled background face</td><td class="ok">Rejected &mdash; cosine near zero, logged as UNKNOWN for manual review</td></tr>
 <tr><td>Frames with no face (wall/ceiling)</td><td class="ok">Ignored silently &mdash; no log entry, no false alarm</td></tr>
 </table>
 
+<h3>Security-layer verification (live)</h3>
+<table>
+<tr><th>Test</th><th>Method</th><th>Result</th></tr>
+<tr><td>N-frame confirmation</td><td>45 automated tests + live run</td><td class="ok">Verdicts need 3 consecutive agreeing frames; streak resets on disagreement</td></tr>
+<tr><td>Photo/screen attack</td><td>Static photos fed as a live image source</td><td class="ok">Flagged <b>SPOOF?</b> in the workflow panel, logged unverified, never MATCHED</td></tr>
+<tr><td>Camera outage</td><td>Source stopped mid-run</td><td class="ok">Outage banner + critical alert + auto-restart + audit entries</td></tr>
+<tr><td>Operator audit</td><td>Login / ack / reject / enroll / toggle</td><td class="ok">Every action in the append-only audit trail</td></tr>
+<tr><td>Backup integrity</td><td><code>backup.py</code> + <code>--verify</code></td><td class="ok">Consistent archive with manifest; PRAGMA integrity check OK</td></tr>
+</table>
+
 <div class="note warn"><b>Observed limitation:</b> matching quality depends on
 how large the face is in the frame. During phone testing at 640&times;480 the
-face was only ~55&ndash;90&nbsp;px wide, which pushed the cosine score down to
-~0.12 and below threshold. Holding the camera closer, or using a higher stream
-resolution (1280&times;720 or above), restores accurate recognition. This is a
-framing issue, not a model failure &mdash; the same face scores 0.48&ndash;0.67
-when properly framed.</div>
+face was only ~55&ndash;90&nbsp;px wide, which pushed the cosine score below
+threshold. Holding the camera closer, or using a higher stream resolution
+(1280&times;720 or above), restores accurate recognition &mdash; and the
+N-frame confirmation now absorbs single-frame dips automatically.</div>
 
 <div class="note good"><b>Design strength:</b> the system errs on the side of
-caution. A low-confidence face is logged as UNKNOWN and flagged for a human
-rather than being force-matched to the closest person. In the evaluation above,
-<b>zero false acceptances</b> occurred.</div>
+caution at every stage. A low-confidence face is logged as UNKNOWN and flagged
+for a human rather than force-matched; a confirmed identity without liveness
+evidence is held, not accepted; in the evaluation above, <b>zero false
+acceptances</b> occurred.</div>
 
-<!-- ============================================================ 8 -->
-<h2>8. Security, Privacy &amp; Ethical Considerations</h2>
+<!-- ============================================================ 10 -->
+<h2>10. Security Model, Privacy &amp; Ethical Considerations</h2>
+<p><code>docs/SECURITY.md</code> contains the full threat model (T1&ndash;T10
+with mitigations and residual risks); <code>docs/PRIVACY_NOTICE.md</code> is a
+plain-language, DPDP-aligned data-practices notice. The essentials:</p>
+
+<h3>Threat model summary</h3>
+<table>
+<tr><th>Threat</th><th>Mitigation</th><th>Residual risk (honest)</th></tr>
+<tr><td>Wrong identity from one blurred frame</td><td>Tracking + N-frame confirmation</td><td>Persistent similar-looking impostor &mdash; bounded by threshold + liveness</td></tr>
+<tr><td>Printed photo attack</td><td>Motion + blink PAD; blocked from MATCHED in enforced mode</td><td>Very high-res photo with hand jitter may read "unknown", never "live"</td></tr>
+<tr><td>Video replay of a blinking person</td><td>Passive PAD sees genuine motion/blinks</td><td class="mid"><b>Can pass</b> &mdash; documented; guard challenge recommended</td></tr>
+<tr><td>Dashboard credential theft</td><td>Lockout, session hardening, CSRF defence, audit</td><td>Single-factor by design (operator appliance)</td></tr>
+<tr><td>Camera sabotage / outage</td><td>Watchdog: alert + banner + auto-restart</td><td>Stall window is unmonitored &mdash; made visible, not silent</td></tr>
+<tr><td>Evidence loss / tampering</td><td>Audit trail, retention, verified backups</td><td>Host-level attacker can alter the DB &mdash; keep backups off-host</td></tr>
+<tr><td>Network eavesdropping</td><td>Reverse-proxy TLS, security headers</td><td>Built-in server is plain HTTP &mdash; do not expose directly</td></tr>
+<tr><td>False accepts from a bad threshold</td><td>On-site threshold sweep, FAR &le; 1% target</td><td>Sample statistics are small &mdash; re-measure on site</td></tr>
+</table>
 
 <h3>Consent-first enrollment</h3>
 <p>Enrollment requires an explicit consent checkbox. No face is enrolled without
 it. Face embeddings are stored as binary blobs, not photographs.</p>
 
-<h3>Data locality</h3>
+<h3>Data locality, retention and rights</h3>
 <ul>
   <li>All data lives locally: <code>database/vc_entry.db</code> plus snapshot
-  images in <code>static/snapshots/</code></li>
-  <li>Nothing is uploaded to any cloud service or third party</li>
-  <li>Full erasure = delete the database folder and snapshots folder</li>
+  images in <code>static/snapshots/</code>; <b>nothing leaves the machine</b>
+  except operator-configured alert summaries (text only, never embeddings)</li>
+  <li>Automatic retention: entries/alerts/snapshots 30 days, audit 90 days</li>
+  <li>Data-subject rights: deactivation/deletion removes the person's
+  embedding, photo and profile; full erasure = delete DB + snapshots + backups</li>
   <li>Snapshots are capped (240 most recent) and pruned automatically</li>
 </ul>
 
@@ -304,74 +506,105 @@ driven by the system.</p>
   elderly subjects may differ</li>
   <li>The enrolled gallery determines who can ever be recognized; unknown faces
   are never guessed</li>
+  <li>Liveness is <i>passive</i>: it stops photo/screen attacks but not a
+  high-quality video replay (see threat model)</li>
 </ul>
 
 <h3>What this prototype does NOT do</h3>
 <p class="bad"><b>No door control, no lock control, no automated entry grant.
 </b>The prototype stops at identification, logging and notification.</p>
 
-<!-- ============================================================ 9 -->
-<h2>9. How to Run</h2>
+<!-- ============================================================ 11 -->
+<h2 class="pb">11. How to Run</h2>
 <pre>python -m pip install -r requirements.txt
 py app.py                            <b># webcam / sample data</b>
 py app.py --source visitor.mp4       <b># a video file</b>
-py app.py --source http://10.0.17.58:8080/video   <b># phone camera</b></pre>
-<p>Then open <code>http://127.0.0.1:5000</code></p>
+py app.py --source http://10.0.17.58:8080/video   <b># phone camera</b>
+py serve.py                          <b># production (Waitress)</b></pre>
+<p>Then open <code>http://127.0.0.1:5000</code> and log in with the admin
+password (from <code>VC_ADMIN_PASSWORD</code> or the log file).</p>
 
 <table>
 <tr><th>Command</th><th>Purpose</th></tr>
 <tr><td><code>py app.py</code></td><td>Start with the default source</td></tr>
 <tr><td><code>--source</code></td><td>Webcam index, video file, image folder, or stream URL</td></tr>
-<tr><td><code>--port</code></td><td>Change the dashboard port (default 5000)</td></tr>
-<tr><td><code>--no-toast</code></td><td>Disable Windows desktop notifications</td></tr>
+<tr><td><code>--port</code> / <code>--no-toast</code></td><td>Dashboard port / disable Windows notifications</td></tr>
+<tr><td><code>py serve.py</code></td><td>Production WSGI server (behind a TLS reverse proxy)</td></tr>
+<tr><td><code>py backup.py [--keep N] [--verify]</code></td><td>Back up / integrity-check the database</td></tr>
+<tr><td><code>py threshold_sweep.py [--dir D]</code></td><td>Re-measure the match threshold on-site</td></tr>
 <tr><td><code>py evaluate.py --self-test</code></td><td>Re-run the accuracy evaluation</td></tr>
 <tr><td><code>py enrollment.py --image ... --name ...</code></td><td>Enroll from the command line</td></tr>
+<tr><td><code>docker compose up -d</code></td><td>Run containerized with named volumes</td></tr>
 </table>
 
-<h3>Configuration</h3>
+<h3>Key configuration</h3>
 <table>
 <tr><th>Variable</th><th>Default</th><th>Meaning</th></tr>
+<tr><td><code>VC_ADMIN_PASSWORD</code></td><td>generated</td><td>Dashboard login (random printed to log if unset)</td></tr>
+<tr><td><code>VC_LIVENESS</code></td><td><code>enforced</code></td><td>Anti-spoof: enforced / monitor / off</td></tr>
+<tr><td><code>VC_CONFIRM_FRAMES</code></td><td>3</td><td>Consecutive agreeing frames for a verdict</td></tr>
+<tr><td><code>VC_MIN_COSINE</code></td><td>0.363</td><td>Match threshold (tune from the sweep report)</td></tr>
+<tr><td><code>VC_STALL_SECONDS</code></td><td>25</td><td>No frames &rarr; watchdog restart + alert</td></tr>
+<tr><td><code>VC_ALERT_EMAIL_TO</code> / <code>VC_ALERT_WEBHOOK_URL</code></td><td>unset</td><td>Out-of-band alert channels</td></tr>
 <tr><td><code>VC_COOLDOWN</code></td><td>15 (seconds)</td><td>Duplicate-entry suppression window</td></tr>
-<tr><td><code>VC_SOURCE</code></td><td>auto</td><td>Override the default frame source</td></tr>
-<tr><td><code>VC_MAX_WIDTH</code></td><td>960 px</td><td>Frames wider than this are downscaled before detection</td></tr>
+<tr><td><code>VC_RETENTION_DAYS</code> / <code>VC_AUDIT_RETENTION_DAYS</code></td><td>30 / 90</td><td>Automatic data purge windows</td></tr>
+<tr><td><code>VC_SOURCE</code> / <code>VC_MAX_WIDTH</code></td><td>auto / 960&nbsp;px</td><td>Frame source / downscale width</td></tr>
 </table>
+<p>The README documents the full environment-variable reference (24 variables),
+alert-channel setup, HTTPS proxy configurations, and backup scheduling.</p>
 
-<!-- ============================================================ 10 -->
-<h2>10. Limitations &amp; Future Work</h2>
+<!-- ============================================================ 12 -->
+<h2>12. Limitations &amp; Future Work</h2>
 <table>
 <tr><th>Current limitation</th><th>Planned improvement</th></tr>
-<tr><td>Single face tracked per frame (highest scoring)</td><td>Multi-face tracking with per-face independent decisions</td></tr>
-<tr><td>Match quality sensitive to face size in frame</td><td>Higher-resolution capture + multi-frame scoring per visitor</td></tr>
+<tr><td>Passive liveness cannot stop a video replay of a blinking person</td><td>Active challenge-response (automated head-turn prompts) or an IR/depth camera for certified PAD</td></tr>
+<tr><td>Sample-data threshold statistics are small (2 identities)</td><td>On-site sweep with real probes; per-person adaptive thresholds</td></tr>
+<tr><td>Single machine, single camera</td><td>Multi-camera support across cabin entry points, with role-based operator logins</td></tr>
+<tr><td>Single-factor admin login</td><td>SSO / 2FA via the reverse proxy; per-operator credentials</td></tr>
 <tr><td>Manual enrollment only</td><td>Bulk import from the college student database / ID cards</td></tr>
-<tr><td>Flat cosine threshold</td><td>Per-person adaptive thresholds and liveness checks</td></tr>
-<tr><td>Single machine, single camera</td><td>Multi-camera support across cabin entry points, with role-based logins</td></tr>
-<tr><td>Local SQLite</td><td>Optional central server with an audit dashboard for security staff</td></tr>
-<tr><td>Photo-only enrolment (no liveness)</td><td>Anti-spoofing &mdash; blink / head-turn liveness to reject photos and masks</td></tr>
+<tr><td>Local SQLite only</td><td>Optional central server with an audit dashboard for security staff</td></tr>
+<tr><td>Watchdog restarts re-open the same device</td><td>Health metrics dashboard + SNMP/email diagnostics for hardware failures</td></tr>
 </table>
+<p><i>Earlier limitations &mdash; single-face-per-frame decisions, flat
+single-frame thresholds, and photo-only enrollment with no liveness &mdash;
+have been resolved in this revision by the tracker, N-frame confirmation,
+threshold sweep and passive anti-spoofing described above.</i></p>
 
-<!-- ============================================================ 11 -->
-<h2>11. Project Deliverables</h2>
+<!-- ============================================================ 13 -->
+<h2>13. Project Deliverables</h2>
 <table>
 <tr><th>#</th><th>Deliverable</th><th>Status</th></tr>
 <tr><td>1</td><td>Face detection pipeline (YuNet)</td><td class="ok">Complete</td></tr>
 <tr><td>2</td><td>Face recognition &amp; matching (SFace + cosine)</td><td class="ok">Complete</td></tr>
 <tr><td>3</td><td>Consent-gated enrollment</td><td class="ok">Complete</td></tr>
-<tr><td>4</td><td>Visitor entry logging (SQLite)</td><td class="ok">Complete</td></tr>
-<tr><td>5</td><td>Dashboard with live camera, logs, stats, alerts</td><td class="ok">Complete</td></tr>
+<tr><td>4</td><td>Visitor entry logging (SQLite) with liveness verdicts</td><td class="ok">Complete</td></tr>
+<tr><td>5</td><td>Login-gated dashboard: camera, workflow view, logs, stats, alerts, audit trail</td><td class="ok">Complete</td></tr>
 <tr><td>6</td><td>Acknowledge / Reject with 24-hour auto-expiry</td><td class="ok">Complete</td></tr>
 <tr><td>7</td><td>Windows toast notifications</td><td class="ok">Complete</td></tr>
-<tr><td>8</td><td>Phone-as-webcam live streaming</td><td class="ok">Complete</td></tr>
-<tr><td>9</td><td>Accuracy evaluation &amp; metrics report</td><td class="ok">Complete</td></tr>
-<tr><td>10</td><td>Source code on GitHub</td><td class="ok">Complete</td></tr>
+<tr><td>8</td><td>Phone-as-webcam live streaming (low-latency MJPEG)</td><td class="ok">Complete</td></tr>
+<tr><td>9</td><td>Multi-face tracking + N-frame confirmation</td><td class="ok">Complete</td></tr>
+<tr><td>10</td><td>Passive liveness / anti-spoofing with presentation-attack alerts</td><td class="ok">Complete</td></tr>
+<tr><td>11</td><td>Threshold sweep tool + FAR/FRR evidence report</td><td class="ok">Complete</td></tr>
+<tr><td>12</td><td>Email / webhook alert routing with rate limiting</td><td class="ok">Complete</td></tr>
+<tr><td>13</td><td>Camera watchdog: outage detection, auto-restart, critical alerts</td><td class="ok">Complete</td></tr>
+<tr><td>14</td><td>Backup utility (consistent archives, prune, verify)</td><td class="ok">Complete</td></tr>
+<tr><td>15</td><td>Append-only operator audit trail</td><td class="ok">Complete</td></tr>
+<tr><td>16</td><td>Accuracy evaluation &amp; metrics report</td><td class="ok">Complete</td></tr>
+<tr><td>17</td><td>Threat model + privacy notice documentation</td><td class="ok">Complete</td></tr>
+<tr><td>18</td><td>45-test pytest suite + GitHub Actions CI + Docker deployment</td><td class="ok">Complete</td></tr>
+<tr><td>19</td><td>Source code on GitHub</td><td class="ok">Complete</td></tr>
 </table>
 
 <h3>Repository</h3>
 <pre>https://github.com/Argyrys/Face-Recognition-System</pre>
 
 <div class="note good" style="margin-top:22px">
-<b>Conclusion:</b> the prototype reliably detects and identifies visitors,
-produces a verifiable audit trail, and alerts staff in real time &mdash; while
-keeping the final access decision firmly in human hands.
+<b>Conclusion:</b> the system reliably detects, tracks and identifies visitors
+on sustained evidence rather than single frames, rejects photo and screen
+presentation attacks, stays visible and self-recovering when the camera fails,
+routes alerts beyond the screen, preserves a tamper-evident audit trail with
+verified backups &mdash; while keeping every access decision firmly in human
+hands and every claim about its own limits honest.
 </div>
 
 <div class="foot">AI-Based Face Recognition for VC Cabin Entry &nbsp;&bull;&nbsp;
