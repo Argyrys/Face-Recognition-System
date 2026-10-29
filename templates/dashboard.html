@@ -384,6 +384,13 @@
                     box-shadow:none; }
   .pill-green.off .dot { background:#6b5f93; box-shadow:none; animation:none; }
 
+  .degraded { display:flex; gap:10px; align-items:center; justify-content:center;
+    background:rgba(255,77,109,.12); border:1px solid rgba(255,77,109,.5);
+    color:var(--bad); font-weight:700; font-size:12.5px; padding:11px 16px;
+    clip-path:var(--chamfer); margin-bottom:20px; letter-spacing:1px;
+    font-family:var(--mono); text-transform:uppercase;
+    animation:blink 1.4s ease-in-out infinite; }
+
   /* ------------------------------------------------------ stat cards */
   .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:22px;
            margin-bottom:22px; }
@@ -419,6 +426,8 @@
           box-shadow:inset 0 0 0 1px var(--line); }
   .chip-blue { background:rgba(0,240,255,.1); color:var(--acc);
                box-shadow:inset 0 0 0 1px rgba(0,240,255,.35); }
+  .chip-warn { background:rgba(255,194,61,.1); color:var(--warn);
+               box-shadow:inset 0 0 0 1px rgba(255,194,61,.35); }
   .chip-ok   { background:var(--ok-bg); color:var(--ok);
                box-shadow:inset 0 0 0 1px rgba(45,255,158,.35); }
   .chip-bad  { background:var(--bad-bg); color:var(--bad);
@@ -549,6 +558,10 @@
       </div>
     </div>
 
+    <div id="degraded-banner" class="degraded" style="display:none">
+      &#9888; CAMERA OUTAGE &mdash; ENTRY IS UNMONITORED (auto-restart running)
+    </div>
+
     <!-- ================================================== DASHBOARD -->
     <section class="view active" id="view-dashboard">
       <div class="stats">
@@ -601,8 +614,11 @@
           </div>
           <div class="cam-meta">
             <div class="meta-row"><b>Source</b><span id="m-source">-</span></div>
+            <div class="meta-row"><b>Liveness mode</b><span id="m-liveness">-</span></div>
             <div class="meta-row"><b>Frames processed</b><span id="m-frames">0</span></div>
             <div class="meta-row"><b>Faces detected</b><span id="m-detections">0</span></div>
+            <div class="meta-row"><b>Camera age</b><span id="m-camage">-</span></div>
+            <div class="meta-row"><b>Alert channels</b><span id="m-alerts">none (on-screen only)</span></div>
             <div class="meta-row"><b>Last visitor event</b><span id="m-event">None yet</span></div>
           </div>
         </div>
@@ -724,9 +740,10 @@
             <thead><tr>
               <th>Photo</th><th>Visitor</th><th>Category</th><th>Department</th>
               <th>ID</th><th>Time</th><th>Status</th><th>Confidence</th>
+              <th>Liveness</th>
             </tr></thead>
             <tbody id="logs-body">
-              <tr class="muted-row"><td colspan="8">No entries yet.</td></tr>
+              <tr class="muted-row"><td colspan="9">No entries yet.</td></tr>
             </tbody>
           </table>
         </div>
@@ -806,6 +823,12 @@ const fmtTime = iso => {
 const pillHtml = result => {
   const ok = result === "MATCHED";
   return `<span class="pill ${ok ? "ok" : "bad"}">${esc(result)}</span>`;
+};
+const liChipHtml = l => {
+  if (!l) return "";
+  const cls = l === "spoof" ? "chip-bad" : l === "live" ? "chip-ok" : "chip-warn";
+  const txt = l === "spoof" ? "SPOOF?" : l === "live" ? "LIVE" : "UNVERIFIED";
+  return `<span class="chip ${cls}">${txt}</span>`;
 };
 const confPct = c => c == null ? "-" : (c * 100).toFixed(1) + "%";
 
@@ -908,12 +931,19 @@ async function renderStatus() {
     $("cam-tag").hidden = !s.running;
     $("cam-source").textContent = s.source || "no source";
     $("m-source").textContent = s.source || "-";
+    $("m-liveness").textContent = s.liveness || "-";
     $("m-frames").textContent = s.frames ?? 0;
     $("m-detections").textContent = s.detections ?? 0;
+    $("m-camage").textContent =
+      s.camera_age == null ? "-" : s.camera_age + "s ago";
+    $("m-alerts").textContent =
+      (s.alerts_armed && s.alerts_armed.length)
+        ? s.alerts_armed.join(", ") : "none (on-screen only)";
     const ev = s.last_event;
     $("m-event").textContent = ev
-      ? `${ev.name} - ${ev.result} @ ${String(ev.at || "").slice(11, 19)}`
+      ? `${ev.name} - ${ev.result}${ev.liveness ? " (" + ev.liveness + ")" : ""} @ ${String(ev.at || "").slice(11, 19)}`
       : "None yet";
+    $("degraded-banner").style.display = s.degraded ? "flex" : "none";
   } catch (e) {}
 }
 
@@ -932,7 +962,7 @@ function notifHtml(a) {
   return `<div class="notif">
     ${photo}
     <div class="body">
-      <b>${esc(a.name)} ${pillHtml(a.result)}</b>
+      <b>${esc(a.name)} ${pillHtml(a.result)} ${liChipHtml(a.liveness)}</b>
       <div class="m">${esc(a.role || "Visitor")}${a.department ? " · " + esc(a.department) : ""}
         ${a.confidence_pct != null ? " · " + a.confidence_pct + "%" : ""}
         · ${fmtTime(a.recognized_at)}</div>
@@ -950,6 +980,7 @@ function resolvedHtml(a) {
     <div class="body">
       <b>${esc(a.name)}
         <span class="pill ${rejected ? "bad" : "gray"}">${rejected ? "REJECTED" : "ACKNOWLEDGED"}</span>
+        ${liChipHtml(a.liveness)}
       </b>
       <div class="m">${esc(a.role || "Visitor")}${a.department ? " · " + esc(a.department) : ""}
         · ${fmtTime(a.recognized_at)}</div>
@@ -1038,7 +1069,7 @@ async function renderLogs() {
     const rows = await (await fetch("/api/entries?limit=100")).json();
     const tb = $("logs-body");
     if (!rows.length) {
-      tb.innerHTML = `<tr class="muted-row"><td colspan="8">No entries yet.</td></tr>`;
+      tb.innerHTML = `<tr class="muted-row"><td colspan="9">No entries yet.</td></tr>`;
       return;
     }
     tb.innerHTML = rows.map(e => `<tr>
@@ -1051,6 +1082,7 @@ async function renderLogs() {
       <td class="mono">${fmtTime(e.recognized_at)}</td>
       <td>${pillHtml(e.result)}</td>
       <td class="mono">${confPct(e.confidence)}</td>
+      <td>${liChipHtml(e.liveness) || "-"}</td>
     </tr>`).join("");
   } catch (e) {}
 }
