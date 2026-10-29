@@ -32,8 +32,10 @@ from face_detection import FaceDetector
 from face_recognition import FaceRecognizer, best_match
 from notification import show_toast
 from pipeline import Pipeline
+from alerter import build_alerter
 
 log = setup_logging()
+alerter = build_alerter()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAMPLE_DIR = os.path.join(BASE_DIR, "sample_data")
@@ -121,6 +123,17 @@ app.config["SECRET_KEY"] = _secret_key()
 PUBLIC_PATHS = {"/login", "/health"}
 
 
+@app.after_request
+def _security_headers(resp):
+    """Baseline hardening headers on every response."""
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    if request.path.startswith("/api/"):
+        resp.headers.setdefault("Cache-Control", "no-store")
+    return resp
+
+
 @app.before_request
 def _require_auth():
     """Single gate for every page and API. Static assets, /login and /health
@@ -194,10 +207,34 @@ def dashboard():
     return render_template("dashboard.html", stats=db.stats())
 
 
+def _camera_age(p) -> int:
+    """Seconds since the pipeline last produced a frame (None if unknown)."""
+    if p is None or not p.status.get("last_frame_at"):
+        return None
+    try:
+        last = datetime.datetime.strptime(str(p.status["last_frame_at"])[:19],
+                                           "%Y-%m-%dT%H:%M:%S")
+        return max(0, int((datetime.datetime.now() - last).total_seconds()))
+    except ValueError:
+        return None
+
+
 @app.route("/api/status")
 def api_status():
-    status = dict(pipeline.status) if pipeline else {"running": False, "state": "not started"}
+    status = dict(pipeline.status) if pipeline else {
+        "running": False, "state": "not started",
+        "liveness": str(Config.LIVENESS).lower(),
+    }
     status["stats"] = db.stats()
+    status["alerts_armed"] = alerter.armed
+    age = _camera_age(pipeline)
+    status["camera_age"] = age
+    degraded = bool(pipeline and pipeline.status.get("running")
+                    and age is not None and age > Config.STALL_SECONDS)
+    if _WD.get("outage"):
+        status["state"] = "camera outage - restarting..."
+        degraded = True
+    status["degraded"] = degraded
     return jsonify(status)
 
 
@@ -330,7 +367,8 @@ def api_analyze():
         })
 
     embedding = recognizer.embed(img, face)
-    person_id, score = best_match(embedding, db.gallery())
+    person_id, score = best_match(embedding, db.gallery(),
+                                  threshold=Config.MIN_COSINE)
     person = db.person(person_id) if person_id is not None else None
     matched = person is not None and person["status"] == "active"
 
@@ -490,33 +528,136 @@ def _retention_loop():
 # ------------------------------------------------------------------- boot
 
 def _event_logger():
-    """Mirror pipeline events (matched/unknown visitors) into the log file."""
+    """Mirror pipeline events into the log file and out-of-band channels."""
     seen = None
     while True:
         ev = pipeline.status.get("last_event") if pipeline else None
         if ev is not None and ev is not seen:
             seen = ev
-            log.info("event: %s %s conf=%.3f alert=#%s",
-                     ev["name"], ev["result"], ev["confidence"], ev["alert_id"])
+            li = ev.get("liveness")
+            log.info("event: %s %s conf=%.3f liveness=%s alert=#%s",
+                     ev["name"], ev["result"], ev["confidence"], li,
+                     ev["alert_id"])
+            level = "critical" if ev.get("critical") else "info"
+            title = (f"VC Cabin: {ev['name']}"
+                     if ev["result"] == "MATCHED"
+                     else f"VC Cabin alert: {ev['name']}")
+            body = (f"{ev['result']} at {ev['at']} — confidence "
+                    f"{ev['confidence'] * 100:.1f}%"
+                    + (f", liveness={li}" if li else ""))
+            alerter.send(title, body, level)
         time.sleep(1.0)
+
+
+# -- camera watchdog: stall detection + automatic pipeline restart ----------
+
+_WD = {"spec": None, "live": False, "outage": False, "fails": 0,
+       "retry_at": 0.0, "watchdog": False}
+
+
+def _looks_live(spec: str) -> bool:
+    return spec.startswith(("http://", "https://", "rtsp://")) or spec.isdigit()
+
+
+def _restart_pipeline(reason: str) -> bool:
+    """Stop the current pipeline and bring a fresh one up on the same source."""
+    global pipeline
+    old = pipeline
+    if old is not None:
+        old.stop()
+    spec = _WD.get("spec") or (old.source.spec if old else default_source())
+    try:
+        new = Pipeline(spec, db, toast=Config.TOAST)
+        new.start()
+        pipeline = new
+        db.audit("system.restart", f"{reason} source={new.source.label}")
+        log.warning("pipeline restarted (%s): source=%s", reason,
+                    new.source.label)
+        return True
+    except Exception as exc:
+        pipeline = None
+        db.audit("system.restart_failed", f"{reason}: {exc}")
+        log.error("pipeline restart failed (%s): %s", reason, exc)
+        return False
+
+
+def _watchdog():
+    """Watches frame flow on live sources: flags outages (audit + alert) and
+    restarts the pipeline with backoff until frames come back."""
+    while True:
+        time.sleep(5)
+        now = time.monotonic()
+        if now < _WD["retry_at"]:
+            continue
+        p = pipeline
+        if p is None:
+            if _WD["live"]:
+                if _restart_pipeline("watchdog retry"):
+                    _WD["fails"] = 0
+            continue
+        if not _WD["live"]:
+            continue                      # video files end by design
+        age = _camera_age(p)
+        if age is None or age <= Config.STALL_SECONDS:
+            if _WD["outage"]:
+                _WD["outage"] = False
+                _WD["fails"] = 0
+                db.audit("camera.recovered", f"frames resumed after outage")
+                alerter.send("VC Cabin: camera recovered",
+                             "Frames are flowing again.", "info")
+                log.warning("camera recovered")
+            continue
+        if not _WD["outage"]:
+            _WD["outage"] = True
+            db.audit("camera.outage", f"no frames for {age}s")
+            alerter.send("VC Cabin: camera outage",
+                         f"No frames for {age}s on {_WD['spec']} — "
+                         "the entry is UNMONITORED until the camera returns.",
+                         "critical")
+            log.error("camera outage: no frames for %ss (source=%s)",
+                      age, _WD["spec"])
+        if _restart_pipeline(f"no frames for {age}s"):
+            _WD["fails"] = 0
+            _WD["retry_at"] = now + 8
+        else:
+            _WD["fails"] += 1
+            _WD["retry_at"] = now + min(60, 5 * _WD["fails"])
 
 
 def start_backend(source: str = None, toast: bool = None):
     """Start the recognition pipeline + housekeeping threads (idempotent).
     Shared by the dev server (app.py) and production (serve.py)."""
     global pipeline
-    if pipeline is not None:
+    if pipeline is not None or _WD["spec"] is not None:
         return pipeline
     spec = source or default_source()
-    pipeline = Pipeline(spec, db, toast=Config.TOAST if toast is None else toast)
-    pipeline.start()
-    db.audit("system.start", f"source={pipeline.source.label}")
-    log.info("recognition pipeline started (source=%s)", pipeline.source.label)
+    _WD["spec"] = spec
+    _WD["live"] = _looks_live(spec)
+    try:
+        pipeline = Pipeline(spec, db, toast=Config.TOAST if toast is None else toast)
+        pipeline.start()
+        _WD["live"] = pipeline.live_source
+        db.audit("system.start", f"source={pipeline.source.label} "
+                                 f"liveness={pipeline.liveness_mode} "
+                                 f"confirm={pipeline.confirm_frames}f")
+        log.info("recognition pipeline started (source=%s, liveness=%s, "
+                 "confirmation=%s frames)",
+                 pipeline.source.label, pipeline.liveness_mode,
+                 pipeline.confirm_frames)
+    except Exception as exc:
+        db.audit("system.start_failed", f"{spec}: {exc}")
+        log.error("pipeline failed to start on '%s': %s (watchdog will retry)",
+                  spec, exc)
+        _WD["retry_at"] = time.monotonic() + 10
     run_retention()
     threading.Thread(target=_retention_loop, daemon=True,
                      name="vc-retention").start()
     threading.Thread(target=_event_logger, daemon=True,
                      name="vc-events").start()
+    if not _WD["watchdog"]:
+        _WD["watchdog"] = True
+        threading.Thread(target=_watchdog, daemon=True,
+                         name="vc-watchdog").start()
     return pipeline
 
 
