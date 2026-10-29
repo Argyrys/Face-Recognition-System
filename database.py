@@ -79,7 +79,7 @@ class Database:
         self._version = 0
 
     def _migrate(self):
-        """Add the alert decision column and backfill older rows."""
+        """Add columns introduced after the first release; backfill old rows."""
         cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(alerts)")}
         if "decision" not in cols:
             self._conn.execute("ALTER TABLE alerts ADD COLUMN decision TEXT")
@@ -87,6 +87,10 @@ class Database:
             self._conn.execute(
                 "UPDATE alerts SET decision = 'acknowledged' WHERE acked = 1"
             )
+            self._conn.commit()
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(entry_log)")}
+        if "liveness" not in cols:
+            self._conn.execute("ALTER TABLE entry_log ADD COLUMN liveness TEXT")
             self._conn.commit()
 
     # -- persons -----------------------------------------------------------
@@ -150,14 +154,15 @@ class Database:
     # -- entry log ---------------------------------------------------------
 
     def add_entry(self, name, result, confidence, snapshot,
-                  person_id=None, role=None, department=None, external_id=None):
+                  person_id=None, role=None, department=None, external_id=None,
+                  liveness=None):
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO entry_log (person_id, name, role, department,"
-                " external_id, recognized_at, confidence, result, snapshot)"
-                " VALUES (?,?,?,?,?,?,?,?,?)",
+                " external_id, recognized_at, confidence, result, snapshot,"
+                " liveness) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (person_id, name, role, department, external_id, _now(),
-                 confidence, result, snapshot),
+                 confidence, result, snapshot, liveness),
             )
             self._conn.commit()
             return int(cur.lastrowid)

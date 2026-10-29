@@ -31,6 +31,39 @@ class Config:
     # Recognition ---------------------------------------------------------
     CAMERA = _env("VC_CAMERA", "0")                 # index, video file, or stream URL
     TOAST = _env("VC_TOAST", "1") == "1"
+    # Anti-spoofing: enforced blocks photo/replay matches on live sources,
+    # monitor only labels them, off disables the check entirely.
+    LIVENESS = _env("VC_LIVENESS", "enforced")      # enforced | monitor | off
+    LIVENESS_MIN_MOTION = float(_env("VC_LIVENESS_MIN_MOTION", "0.004"))
+    LIVENESS_HOLD_FRAMES = int(_env("VC_LIVENESS_HOLD_FRAMES", "20"))
+    # N-frame confirmation: a match needs this many consecutive agreeing frames
+    CONFIRM_FRAMES = int(_env("VC_CONFIRM_FRAMES", "3"))
+    UNKNOWN_FRAMES = int(_env("VC_UNKNOWN_FRAMES", "3"))
+    # Cosine similarity floor for a match (see threshold_sweep.py output;
+    # 0.363 is the SFace vendor default and sits inside the measured
+    # proven-safe interval on the bundled sample data).
+    MIN_COSINE = float(_env("VC_MIN_COSINE", "0.363"))
+
+    # Watchdog -------------------------------------------------------------
+    STALL_SECONDS = int(_env("VC_STALL_SECONDS", "25"))   # no frames => outage
+
+    # Out-of-band alerts (both optional; disabled when unset) --------------
+    ALERT_MIN_INTERVAL = int(_env("VC_ALERT_MIN_INTERVAL", "60"))  # per channel
+    SMTP_HOST = _env("VC_SMTP_HOST", "")
+    SMTP_PORT = int(_env("VC_SMTP_PORT", "587"))
+    SMTP_USER = _env("VC_SMTP_USER", "")
+    SMTP_PASS = _env("VC_SMTP_PASS", "")
+    SMTP_FROM = _env("VC_SMTP_FROM", "vc-cabin@localhost")
+    SMTP_STARTTLS = _env("VC_SMTP_STARTTLS", "1") == "1"
+    ALERT_EMAIL_TO = _env("VC_ALERT_EMAIL_TO", "")
+    ALERT_WEBHOOK_URL = _env("VC_ALERT_WEBHOOK_URL", "")   # Discord/Slack/IFTTT/Zapier
+
+    # TLS (combined PEM with certificate + private key) ---------------------
+    SSL_PEM = _env("VC_SSL_PEM", "")
+
+    # Backups ---------------------------------------------------------------
+    BACKUP_DIR = _env("VC_BACKUP_DIR", os.path.join(BASE_DIR, "backups"))
+    BACKUP_KEEP = int(_env("VC_BACKUP_KEEP", "30"))
 
     # Data retention ------------------------------------------------------
     RETENTION_DAYS = int(_env("VC_RETENTION_DAYS", "30"))          # entries + snapshots

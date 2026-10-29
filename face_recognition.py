@@ -34,19 +34,21 @@ def cosine(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b))
 
 
-def best_match(embedding: np.ndarray, gallery):
+def best_match(embedding: np.ndarray, gallery, threshold: float = None):
     """Match against [(person_id, embedding), ...].
 
-    Returns (person_id or None, score). None when below COSINE_THRESHOLD
-    or the gallery is empty -- never guesses a closest identity.
+    Returns (person_id or None, score). None when below the threshold
+    (default COSINE_THRESHOLD, override for tuned operating points) or the
+    gallery is empty -- never guesses a closest identity.
     """
     if not gallery:
         return None, 0.0
+    thr = COSINE_THRESHOLD if threshold is None else threshold
     ids = [g[0] for g in gallery]
     matrix = np.stack([g[1] for g in gallery])
     scores = matrix @ embedding
     i = int(np.argmax(scores))
     score = float(scores[i])
-    if score >= COSINE_THRESHOLD:
+    if score >= thr:
         return ids[i], score
     return None, score

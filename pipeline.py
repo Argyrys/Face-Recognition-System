@@ -1,4 +1,15 @@
-"""Background recognition pipeline: frames -> detect -> match -> log -> notify."""
+"""Background recognition pipeline: frames -> detect -> track -> confirm ->
+liveness gate -> match -> log -> notify.
+
+Security changes vs. the original single-frame pipeline:
+- every face is TRACKED across frames (tracker.py), not judged per frame;
+- a MATCHED entry needs CONFIRM consecutive frames agreeing on the identity
+  (N-frame confirmation) — one blurred frame can no longer log a wrong name;
+- liveness (liveness.py) gates matches on live sources: a photo or still
+  screen is recorded as UNKNOWN/PRESENTATION ATTACK, never MATCHED;
+- unknown visitors get the same N-frame treatment, so detection flicker
+  cannot spam the alert list.
+"""
 
 import datetime
 import os
@@ -9,11 +20,14 @@ import cv2
 import numpy as np
 
 from camera import FrameSource
+from config import Config
 from database import Database
 from enrollment import SNAPSHOT_DIR
 from face_detection import FaceDetector
 from face_recognition import FaceRecognizer, best_match
+from liveness import entry_label
 from notification import show_toast
+from tracker import MultiTracker
 
 COOLDOWN_SECONDS = float(os.environ.get("VC_COOLDOWN", "15"))
 SNAPSHOT_KEEP = 240  # max recent snapshots kept on disk
@@ -47,13 +61,30 @@ class Pipeline(threading.Thread):
         self._latest_jpeg = None  # latest preview frame, for the dashboard feed
         self._enabled = threading.Event()
         self._enabled.set()  # recognition starts ON
+
+        # -- security layer ------------------------------------------------
+        self.tracker = MultiTracker()
+        self.confirm_frames = max(1, Config.CONFIRM_FRAMES)
+        self.unknown_frames = max(1, Config.UNKNOWN_FRAMES)
+        self.min_cosine = float(Config.MIN_COSINE)
+        self.liveness_mode = str(Config.LIVENESS).lower()
+        if self.liveness_mode not in ("enforced", "monitor", "off"):
+            self.liveness_mode = "enforced"
+        # recorded video / image folders ARE replay material by definition;
+        # liveness enforcement only makes sense on a live camera.
+        self.live_source = self.source.label.startswith(("webcam", "stream"))
+        if self.liveness_mode == "enforced" and not self.live_source:
+            self.liveness_mode = "monitor"
+
         self.status = {
             "running": False,
             "state": "starting",
             "recognition": "on",
+            "liveness": self.liveness_mode,
             "source": self.source.label,
             "frames": 0,
             "detections": 0,
+            "tracks": 0,
             "last_event": None,
             "last_frame_at": None,
         }
@@ -135,77 +166,149 @@ class Pipeline(threading.Thread):
             self._gallery = self.db.gallery()
             self._gallery_version = self.db.version
 
+        frame_idx = self.status["frames"]
         faces = self.detector.detect(frame)
-        face = self.detector.best(faces)
-        if face is None:
+        if faces is not None and len(faces):
+            self.status["detections"] += len(faces)
+        gray = None
+        if self.liveness_mode != "off":
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        tracks = self.tracker.update(faces, frame_idx, gray)
+        self.status["tracks"] = len(tracks)
+
+        for tr in tracks:
+            embedding = self.recognizer.embed(frame, tr.face)
+            person_id, score = best_match(embedding, self._gallery,
+                                          threshold=self.min_cosine)
+            tr.record(person_id, score)
+            self._maybe_log(frame, tr)
+
+    def _maybe_log(self, frame, tr):
+        """Emit at most one entry per track, and only on sufficient evidence."""
+        if tr.logged:
             return
-        self.status["detections"] += 1
+        state = ("unknown" if self.liveness_mode == "off"
+                 else tr.liveness_state(Config.LIVENESS_MIN_MOTION))
 
-        embedding = self.recognizer.embed(frame, face)
-        person_id, score = best_match(embedding, self._gallery)
-        now = time.monotonic()
+        person = None
+        if tr.ready_to_log(self.confirm_frames):
+            candidate = self.db.person(tr.top_person)
+            if candidate is not None and candidate["status"] == "active":
+                person = candidate
 
-        if person_id is not None:
-            person = self.db.person(person_id)
-            matched = person is not None and person["status"] == "active"
-        else:
-            person = None
-            matched = False
-
-        key = f"person:{person['id']}" if matched else "unknown"
-        if not self._cooldown(key, now):
+        if person is not None:
+            if self.liveness_mode == "enforced" and state != "live":
+                if state == "spoof":
+                    # a photo/screen of an ENROLLED person: reject loudly
+                    tr.logged = True
+                    self._log_spoof(frame, tr, state, of_person=person)
+                    return
+                # not enough evidence yet: give the visitor a moment
+                tr.hold_frames += 1
+                if tr.hold_frames <= Config.LIVENESS_HOLD_FRAMES:
+                    return
+                tr.logged = True
+                self._log_unknown(frame, tr, "unknown",
+                                  note="liveness unverified")
+                return
+            key = f"person:{person['id']}"
+            now = time.monotonic()
+            if not self._cooldown(key, now):
+                tr.logged = True
+                return
+            self._last_logged[key] = now
+            tr.logged = True
+            self._log_matched(frame, tr, person, state)
             return
-        self._last_logged[key] = now
 
-        if matched:
-            entry_id = self.db.add_entry(
-                name=person["name"], result="MATCHED", confidence=score,
-                snapshot=self._save_snapshot(frame, face),
-                person_id=person["id"], role=person["role"],
-                department=person["department"],
-                external_id=person["external_id"],
-            )
-            self._notify(
-                entry_id, person["name"],
-                f"{person['role']} - {person['department']} - MATCHED "
-                f"{score * 100:.1f}%",
-                score, "MATCHED", frame, face,
-            )
-            return
+        if tr.ready_unknown(self.unknown_frames):
+            now = time.monotonic()
+            if not self._cooldown("unknown", now):
+                tr.logged = True
+                return
+            self._last_logged["unknown"] = now
+            tr.logged = True
+            if self.liveness_mode == "enforced" and state == "spoof":
+                self._log_spoof(frame, tr, state)
+            else:
+                self._log_unknown(frame, tr, state)
 
-        # unknown / below threshold: never guess an identity
+    # ------------------------------------------------------------ emitters
+
+    def _log_matched(self, frame, tr, person, state):
+        score = tr.last_score
+        label = entry_label(self.liveness_mode, state)
+        entry_id = self.db.add_entry(
+            name=person["name"], result="MATCHED", confidence=score,
+            snapshot=self._save_snapshot(frame, tr.box),
+            person_id=person["id"], role=person["role"],
+            department=person["department"],
+            external_id=person["external_id"], liveness=label,
+        )
+        self._notify(
+            entry_id, person["name"],
+            f"{person['role']} - {person['department']} - MATCHED "
+            f"{score * 100:.1f}%",
+            score, "MATCHED", liveness=label,
+        )
+
+    def _log_unknown(self, frame, tr, state, note=None):
+        label = entry_label(self.liveness_mode, state)
+        score = tr.last_score
         entry_id = self.db.add_entry(
             name="Unknown", result="UNKNOWN", confidence=score,
-            snapshot=self._save_snapshot(frame, face),
+            snapshot=self._save_snapshot(frame, tr.box), liveness=label,
         )
-        self._notify(entry_id, "Unknown visitor",
-                     "Unknown / Manual Verification Required", score,
-                     "UNKNOWN", frame, face)
+        message = note or "Unknown / Manual Verification Required"
+        self._notify(entry_id, "Unknown visitor", message, score, "UNKNOWN",
+                     liveness=label)
+
+    def _log_spoof(self, frame, tr, state, of_person=None):
+        """Presentation attack: photo/screen/replay in front of the camera."""
+        label = entry_label(self.liveness_mode, state)
+        score = tr.last_score
+        entry_id = self.db.add_entry(
+            name="Presentation attack", result="UNKNOWN", confidence=score,
+            snapshot=self._save_snapshot(frame, tr.box), liveness=label,
+        )
+        detail = (f"possible replay of enrolled person {of_person['name']}"
+                  if of_person else "unidentified subject")
+        self._notify(
+            entry_id, "Suspected presentation attack",
+            f"PHOTO/REPLAY ATTACK? - {detail} - manual verification required",
+            score, "UNKNOWN", liveness=label, critical=True,
+        )
 
     def _cooldown(self, key: str, now: float) -> bool:
         """True when this person/unknown may be logged again (cooldown passed)."""
         last = self._last_logged.get(key)
         return last is None or (now - last) >= COOLDOWN_SECONDS
 
-    def _notify(self, entry_id, name, message, score, result, frame, face):
+    def _notify(self, entry_id, name, message, score, result,
+                liveness=None, critical=False):
         alert_id = self.db.add_alert(entry_id)
         self.status["last_event"] = {
             "alert_id": alert_id,
             "entry_id": entry_id,
             "name": name,
             "result": result,
+            "liveness": liveness,
+            "critical": bool(critical),
             "confidence": round(float(score), 4),
             "at": datetime.datetime.now().isoformat(timespec="seconds"),
         }
         show_toast("VC Cabin Visitor Alert", message, enabled=self.toast)
 
-    def _save_snapshot(self, frame, face) -> str:
-        x, y, w, h = self.detector.box(face)
+    def _save_snapshot(self, frame, box) -> str:
+        x, y, w, h = (int(v) for v in box)
         margin = int(max(w, h) * 0.25)
         h_img, w_img = frame.shape[:2]
         x1, y1 = max(0, x - margin), max(0, y - margin)
         x2, y2 = min(w_img, x + w + margin), min(h_img, y + h + margin)
         crop = frame[y1:y2, x1:x2]
+        if crop.size == 0:
+            return None
         stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         filename = f"entry_{stamp}.jpg"
         cv2.imwrite(os.path.join(SNAPSHOT_DIR, filename), crop)
