@@ -85,6 +85,7 @@ class Pipeline(threading.Thread):
             "frames": 0,
             "detections": 0,
             "tracks": 0,
+            "workflow": [],
             "last_event": None,
             "last_frame_at": None,
         }
@@ -133,6 +134,7 @@ class Pipeline(threading.Thread):
             if not self._enabled.is_set():
                 # Recognition paused: preview only, no detect/match/log.
                 self.status["state"] = "recognition paused"
+                self.status["workflow"] = []
                 continue
             self.status["state"] = "running"
             try:
@@ -183,6 +185,47 @@ class Pipeline(threading.Thread):
                                           threshold=self.min_cosine)
             tr.record(person_id, score)
             self._maybe_log(frame, tr)
+
+        self.status["workflow"] = self._workflow_snapshot(tracks)
+
+    def _workflow_snapshot(self, tracks) -> list:
+        """Per-track pipeline position for the dashboard workflow view.
+
+        Pure metadata from state the pipeline already keeps — no extra
+        detection/embedding work. One dict per active track:
+        stage   : detect -> track -> confirm -> liveness -> match -> log
+        streak  : consecutive frames agreeing on the current candidate
+        need    : frames still required to reach a verdict
+        """
+        out = []
+        for tr in tracks:
+            candidate = (self.db.person(tr.top_person)
+                         if tr.top_person is not None else None)
+            name = (candidate["name"] if candidate
+                    and candidate["status"] == "active" else None)
+            li = ("off" if self.liveness_mode == "off"
+                  else tr.liveness_state(Config.LIVENESS_MIN_MOTION))
+            # streak/need always reflect the identity evidence the track holds
+            if name is not None:
+                streak, need = tr.top_streak, self.confirm_frames
+            else:
+                streak, need = tr.unknown_streak, self.unknown_frames
+            if tr.logged:
+                stage = "log"
+            elif name is not None:
+                stage = "match" if streak >= need else "confirm"
+                if stage == "match" and self.liveness_mode == "enforced" \
+                        and li != "live":
+                    stage, streak = "liveness", tr.hold_frames
+                    need = Config.LIVENESS_HOLD_FRAMES
+            else:
+                stage = "track"
+            out.append({
+                "id": tr.id, "stage": stage, "streak": streak, "need": need,
+                "candidate": name, "score": round(tr.last_score, 3),
+                "liveness": li,
+            })
+        return out
 
     def _maybe_log(self, frame, tr):
         """Emit at most one entry per track, and only on sufficient evidence."""

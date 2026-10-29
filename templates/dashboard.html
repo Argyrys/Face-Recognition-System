@@ -391,6 +391,40 @@
     font-family:var(--mono); text-transform:uppercase;
     animation:blink 1.4s ease-in-out infinite; }
 
+  .wf { margin-top:14px; border-top:1px solid var(--line); padding-top:12px; }
+  .wf-head { display:flex; align-items:baseline; gap:12px; margin-bottom:10px; }
+  .wf-head b { font-size:11px; letter-spacing:2px; color:var(--muted-2);
+               font-family:var(--mono); }
+  .wf-sub { font-size:10px; color:#4a4066; font-family:var(--mono); }
+  .wf-idle { font-size:11.5px; color:#5d5480; font-family:var(--mono);
+             line-height:1.55; padding:6px 2px; }
+  .wf-row { display:flex; align-items:center; gap:6px; margin-bottom:8px;
+            flex-wrap:wrap; }
+  .wf-tag { font-size:10px; font-family:var(--mono); letter-spacing:1px;
+            color:var(--acc); background:rgba(0,240,255,.07);
+            border:1px solid rgba(0,240,255,.25); padding:3px 8px;
+            clip-path:var(--chamfer-sm, none); flex:none; }
+  .wf-stage { flex:1; min-width:96px; padding:5px 8px; text-align:center;
+              border:1px solid var(--line); background:#0d0a1a;
+              font-family:var(--mono); transition:all .25s; }
+  .wf-stage b { display:block; font-size:8.5px; letter-spacing:1.5px;
+                color:#4a4066; text-transform:uppercase; }
+  .wf-stage span { display:block; font-size:11px; margin-top:2px;
+                   color:#6b5f93; overflow:hidden; text-overflow:ellipsis;
+                   white-space:nowrap; }
+  .wf-stage.done    { border-color:rgba(0,255,136,.35); }
+  .wf-stage.done b, .wf-stage.done span    { color:var(--ok); }
+  .wf-stage.active  { border-color:rgba(0,240,255,.55);
+                      box-shadow:0 0 12px rgba(0,240,255,.15); }
+  .wf-stage.active b, .wf-stage.active span { color:var(--acc); }
+  .wf-stage.hold    { border-color:rgba(255,194,61,.55);
+                      box-shadow:0 0 12px rgba(255,194,61,.12); }
+  .wf-stage.hold b, .wf-stage.hold span    { color:var(--warn); }
+  .wf-stage.bad     { border-color:rgba(255,77,109,.6);
+                      box-shadow:0 0 12px rgba(255,77,109,.18);
+                      animation:blink 1.2s ease-in-out infinite; }
+  .wf-stage.bad b, .wf-stage.bad span      { color:var(--bad); }
+
   /* ------------------------------------------------------ stat cards */
   .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:22px;
            margin-bottom:22px; }
@@ -622,6 +656,17 @@
             <div class="meta-row"><b>Last visitor event</b><span id="m-event">None yet</span></div>
           </div>
         </div>
+
+        <div class="wf">
+          <div class="wf-head">
+            <b>RECOGNITION WORKFLOW</b>
+            <span class="wf-sub">detect &rarr; track &rarr; confirm &rarr; liveness &rarr; match &rarr; log</span>
+          </div>
+          <div id="wf-body" class="wf-body">
+            <div class="wf-idle">Pipeline idle &mdash; no faces in view. Each visitor is tracked and must pass
+              N-frame confirmation and the liveness gate before an entry is logged.</div>
+          </div>
+        </div>
       </div>
 
       <div class="grid2">
@@ -830,6 +875,38 @@ const liChipHtml = l => {
   const txt = l === "spoof" ? "SPOOF?" : l === "live" ? "LIVE" : "UNVERIFIED";
   return `<span class="chip ${cls}">${txt}</span>`;
 };
+
+/* ---------------------------------------------- recognition workflow view */
+const WF_IDLE = `Pipeline idle &mdash; no faces in view. Each visitor is tracked and must pass
+  N-frame confirmation and the liveness gate before an entry is logged.`;
+
+function wfStage(label, value, cls) {
+  return `<div class="wf-stage ${cls || ""}"><b>${label}</b><span>${esc(value)}</span></div>`;
+}
+
+function renderWorkflow(wf) {
+  const body = $("wf-body");
+  if (!body) return;
+  if (!wf || !wf.length) { body.innerHTML = `<div class="wf-idle">${WF_IDLE}</div>`; return; }
+  body.innerHTML = wf.map(t => {
+    const confirmed = t.streak >= t.need && t.need > 0;
+    const liCls = t.liveness === "live" ? "done"
+                : t.liveness === "spoof" ? "bad"
+                : t.liveness === "off"   ? "done" : "hold";
+    const liTxt = t.liveness === "live"   ? "live"
+                : t.liveness === "spoof"  ? "SPOOF?"
+                : t.liveness === "off"    ? "skipped" : "verifying...";
+    return `<div class="wf-row">
+      <span class="wf-tag">TRACK #${t.id}</span>
+      ${wfStage("Detect", "face in view", "done")}
+      ${wfStage("Track", `${t.streak} frame${t.streak === 1 ? "" : "s"}`, "done")}
+      ${wfStage("Confirm", confirmed ? `${t.streak}/${t.need} ok` : `${t.streak}/${t.need} frames`, confirmed ? "done" : "active")}
+      ${wfStage("Liveness", liTxt, liCls)}
+      ${wfStage("Match", t.candidate ? `${t.candidate} ${Math.round(t.score * 100)}%` : "no match yet", t.candidate ? "done" : "hold")}
+      ${wfStage("Log", t.stage === "log" ? "entry written" : "waiting", t.stage === "log" ? "done" : "active")}
+    </div>`;
+  }).join("");
+}
 const confPct = c => c == null ? "-" : (c * 100).toFixed(1) + "%";
 
 /* animate a stat number to its new value */
@@ -944,6 +1021,7 @@ async function renderStatus() {
       ? `${ev.name} - ${ev.result}${ev.liveness ? " (" + ev.liveness + ")" : ""} @ ${String(ev.at || "").slice(11, 19)}`
       : "None yet";
     $("degraded-banner").style.display = s.degraded ? "flex" : "none";
+    renderWorkflow(s.workflow);
   } catch (e) {}
 }
 

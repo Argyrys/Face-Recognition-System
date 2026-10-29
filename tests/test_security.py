@@ -370,6 +370,48 @@ def test_legacy_database_gains_liveness_column(tmp_path):
     assert got["liveness"] == "spoof"
 
 
+# ---------------------------------------------------------- workflow view
+
+def _pipeline_stub(tmp_path):
+    """A Pipeline built just far enough to test _workflow_snapshot
+    (no camera, no frames)."""
+    from pipeline import Pipeline
+    db = Database(os.path.join(str(tmp_path), "wf.db"))
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return Pipeline(os.path.join(root, "sample_data"), db, toast=False)
+
+
+def test_workflow_snapshot_stages(tmp_path):
+    p = _pipeline_stub(tmp_path)
+    tr = make_track()
+    # fresh track, no identity yet -> "track" stage, unknown streak counting
+    for _ in range(2):
+        tr.record(None, 0.2)
+    (snap,) = p._workflow_snapshot([tr])
+    assert snap["stage"] == "track"
+    assert snap["streak"] == 2 and snap["need"] == p.unknown_frames
+    assert snap["candidate"] is None
+
+    # agreeing frames below threshold -> "confirm"
+    tr.record(99, 0.9)                     # person 99 not in gallery
+    tr.record(99, 0.9)
+    tr.record(99, 0.9)
+    (snap,) = p._workflow_snapshot([tr])
+    assert snap["stage"] == "track"       # unknown candidate (id absent) stays
+    assert snap["candidate"] is None
+
+
+def test_workflow_snapshot_follows_logged_track(tmp_path):
+    p = _pipeline_stub(tmp_path)
+    tr = make_track()
+    tr.record(None, 0.1)
+    tr.logged = True                       # pipeline already emitted an entry
+    (snap,) = p._workflow_snapshot([tr])
+    assert snap["stage"] == "log"
+    assert snap["need"] == p.unknown_frames   # evidence numbers are kept
+    assert snap["streak"] == 1
+
+
 # ------------------------------------------------------------ hardening
 
 def test_security_headers_on_every_response(client):
