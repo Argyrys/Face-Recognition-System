@@ -222,7 +222,7 @@ def _camera_age(p) -> int:
 @app.route("/api/status")
 def api_status():
     status = dict(pipeline.status) if pipeline else {
-        "running": False, "state": "not started",
+        "running": False, "state": "not started", "workflow": [],
         "liveness": str(Config.LIVENESS).lower(),
     }
     status["stats"] = db.stats()
