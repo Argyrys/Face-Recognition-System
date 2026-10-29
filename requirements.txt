@@ -1,3 +1,7 @@
-opencv-python>=4.8
+# Runtime dependencies (production image installs only these).
+# opencv-python-headless: same CV APIs as opencv-python, no GUI libs needed —
+# smaller install and works in Docker/CI without libGL.
+opencv-python-headless>=4.9
 numpy>=1.26
 flask>=3.0
+waitress>=3.0

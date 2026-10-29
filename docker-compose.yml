@@ -1,0 +1,23 @@
+services:
+  vc-cabin:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      VC_ADMIN_PASSWORD: ${VC_ADMIN_PASSWORD:?set VC_ADMIN_PASSWORD in a .env file}
+      # VC_CAMERA: "0"                       # webcam index (pass --device below)
+      # VC_CAMERA: "http://10.0.17.58:8080/video"   # or an IP Webcam stream
+      VC_RETENTION_DAYS: "30"
+      VC_LOG_LEVEL: "INFO"
+    volumes:
+      - vc-database:/app/database
+      - vc-snapshots:/app/static/snapshots
+      - vc-logs:/app/logs
+    # devices:                               # uncomment for a local webcam
+    #   - "/dev/video0:/dev/video0"
+    restart: unless-stopped
+
+volumes:
+  vc-database:
+  vc-snapshots:
+  vc-logs:

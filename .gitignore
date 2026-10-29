@@ -1,8 +1,11 @@
 __pycache__/
 *.pyc
+.pytest_cache/
 database/*.db
 static/snapshots/entry_*.jpg
 static/snapshots/person_*.jpg
+logs/
+.env
 server.log
 server.err
 server.pid
