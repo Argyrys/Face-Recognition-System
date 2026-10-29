@@ -90,6 +90,8 @@
   .sys-card small { color:var(--muted-2); font-size:12px; font-family:var(--mono); }
   .side-foot { text-align:center; color:#453a6e; font-size:11px;
                font-family:var(--mono); letter-spacing:1.5px; text-transform:uppercase; }
+  .side-foot a { color:#6b5f93; text-decoration:none; transition:color .15s, text-shadow .15s; }
+  .side-foot a:hover { color:var(--acc); text-shadow:0 0 10px var(--acc-glow); }
 
   /* ------------------------------------------------------------- main */
   main { flex:1; padding:26px 30px 40px; max-width:1100px;
@@ -253,7 +255,10 @@
       <div><b id="sys-title">Connecting&hellip;</b>
            <small id="sys-sub">Recognition system starting</small></div>
     </div>
-    <div class="side-foot">AI Prototype &bull; MCA Project</div>
+    <div class="side-foot">
+      <a href="/logout">Logout</a>
+      &bull; AI Prototype &bull; MCA Project
+    </div>
   </aside>
 
   <main>

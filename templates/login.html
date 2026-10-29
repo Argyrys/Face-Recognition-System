@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — VC Cabin</title>
+<style>
+  @font-face { font-family:"JetBrains Mono"; font-weight:400; font-style:normal;
+    font-display:swap; src:url("/static/fonts/JetBrainsMono-Regular.woff2") format("woff2"); }
+  @font-face { font-family:"JetBrains Mono"; font-weight:700; font-style:normal;
+    font-display:swap; src:url("/static/fonts/JetBrainsMono-Bold.woff2") format("woff2"); }
+  @font-face { font-family:"Orbitron"; font-weight:700; font-style:normal;
+    font-display:swap; src:url("/static/fonts/Orbitron-Bold.woff2") format("woff2"); }
+
+  :root {
+    --bg:#07050f; --card:#100b21; --line:#241a3f;
+    --ink:#ece9f7; --muted:#9c92c2; --muted-2:#6b5f93;
+    --acc:#00f0ff; --acc-2:#ff2e9a;
+    --grad:linear-gradient(120deg, #00f0ff 0%, #a855f7 55%, #ff2e9a 100%);
+    --acc-glow:rgba(0,240,255,.35); --mag-glow:rgba(255,46,154,.30);
+    --bad:#ff4d6d; --bad-bg:rgba(255,77,109,.10);
+    --mono:"JetBrains Mono", Consolas, "Cascadia Mono", monospace;
+    --disp:"Orbitron", "Segoe UI", sans-serif;
+    --chamfer:polygon(14px 0, 100% 0, 100% calc(100% - 14px),
+                      calc(100% - 14px) 100%, 0 100%, 0 14px);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center;
+         justify-content:center; font-family:"Segoe UI", system-ui, Arial, sans-serif;
+         background:var(--bg); color:var(--ink); padding:20px;
+         background-image:
+           radial-gradient(rgba(168,85,247,.08) 1px, transparent 1px),
+           radial-gradient(700px 400px at 80% -10%, rgba(255,46,154,.08), transparent 70%),
+           radial-gradient(700px 400px at -10% 110%, rgba(0,240,255,.07), transparent 70%);
+         background-size:26px 26px, 100% 100%, 100% 100%; }
+  /* CRT scanline veil */
+  body::after { content:""; position:fixed; inset:0; pointer-events:none; z-index:999;
+    background:repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px,
+               transparent 1px 3px); }
+
+  .box { width:100%; max-width:400px; background:var(--card);
+         border:1px solid var(--line); clip-path:var(--chamfer);
+         padding:38px 34px 30px; position:relative;
+         box-shadow:0 2px 12px rgba(0,0,0,.5), 0 0 44px rgba(0,240,255,.06); }
+  .box::before { content:"SECURE//LOCAL"; position:absolute; top:0; right:0;
+    font-family:var(--mono); font-size:9px; letter-spacing:2px; color:#2dff9e;
+    padding:5px 12px 5px 16px; background:rgba(45,255,158,.07);
+    clip-path:polygon(10px 0, 100% 0, 100% 100%, 0 100%); opacity:.85; }
+
+  .brand { display:flex; align-items:center; gap:13px; margin-bottom:26px; }
+  .brand .logo { width:46px; height:46px; clip-path:var(--chamfer);
+                 background:var(--grad); color:#0a0716; font-weight:800;
+                 font-size:15px; display:flex; align-items:center;
+                 justify-content:center; letter-spacing:.5px;
+                 box-shadow:0 0 22px var(--acc-glow), 0 0 34px var(--mag-glow); }
+  .brand h1 { margin:0; font-size:19px; color:#fff; font-family:var(--disp);
+              letter-spacing:1.5px; text-transform:uppercase;
+              background:var(--grad); -webkit-background-clip:text;
+              background-clip:text; -webkit-text-fill-color:transparent; }
+  .brand p  { margin:2px 0 0; font-size:11px; color:var(--muted-2);
+              font-family:var(--mono); letter-spacing:1.5px; text-transform:uppercase; }
+
+  .sub { margin:0 0 20px; color:var(--muted); font-size:12.5px;
+         font-family:var(--mono); letter-spacing:.4px; }
+  .sub::before { content:"▸ "; color:var(--acc-2); }
+
+  label { font-size:11px; color:var(--muted-2); margin-bottom:6px; font-weight:700;
+          letter-spacing:1.5px; text-transform:uppercase; font-family:var(--mono);
+          display:block; }
+  label::before { content:"> "; color:var(--acc); }
+  input[type=password] { width:100%; padding:13px 14px; border:1px solid #2a1e4d;
+    font-size:15px; font-family:var(--mono); background:#0d0920; color:var(--ink);
+    transition:border-color .15s, box-shadow .15s; margin-bottom:18px;
+    clip-path:polygon(9px 0, 100% 0, 100% calc(100% - 9px),
+                      calc(100% - 9px) 100%, 0 100%, 0 9px); }
+  input[type=password]:focus { outline:none; border-color:var(--acc);
+    box-shadow:0 0 0 3px rgba(0,240,255,.15), 0 0 16px rgba(0,240,255,.12); }
+
+  .btn { border:none; cursor:pointer; width:100%; padding:15px;
+         background:var(--grad); color:#0a0716; font-family:var(--disp);
+         font-size:14px; font-weight:700; letter-spacing:1.5px;
+         text-transform:uppercase; clip-path:var(--chamfer);
+         transition:box-shadow .15s, transform .05s; }
+  .btn:hover { box-shadow:0 0 30px var(--acc-glow), 0 0 44px var(--mag-glow); }
+  .btn:active { transform:translateY(1px); }
+
+  .err { display:flex; gap:10px; align-items:center; padding:12px 15px;
+         clip-path:var(--chamfer); margin-bottom:18px; font-size:13px;
+         font-weight:600; font-family:var(--mono);
+         background:var(--bad-bg); color:var(--bad);
+         border:1px solid rgba(255,77,109,.35); }
+  .err::before { content:"!"; font-weight:800; }
+
+  .foot { margin-top:22px; text-align:center; color:#453a6e; font-size:11px;
+          font-family:var(--mono); letter-spacing:1.5px; text-transform:uppercase; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="brand">
+      <div class="logo">VC</div>
+      <div><h1>VC Cabin</h1><p>Face Recognition</p></div>
+    </div>
+    <p class="sub">Operator authentication required</p>
+
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+    <form method="post" action="/login{% if request.args.get('next') %}?next={{ request.args.get('next') | urlencode }}{% endif %}">
+      <label for="password">Admin Password</label>
+      <input type="password" id="password" name="password" autofocus
+             autocomplete="current-password" required>
+      <button class="btn" type="submit">Unlock Dashboard</button>
+    </form>
+
+    <div class="foot">Restricted System &bull; All Actions Logged</div>
+  </div>
+</body>
+</html>

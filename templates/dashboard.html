@@ -117,6 +117,8 @@
                                            box-shadow:0 0 10px var(--mag-glow); }
   .side-foot { text-align:center; color:#453a6e; font-size:11px;
                font-family:var(--mono); letter-spacing:1.5px; text-transform:uppercase; }
+  .side-foot a { color:#6b5f93; text-decoration:none; transition:color .15s, text-shadow .15s; }
+  .side-foot a:hover { color:var(--acc); text-shadow:0 0 10px var(--acc-glow); }
 
   /* ------------------------------------------------------------- main */
   main { flex:1; padding:26px 30px 40px; max-width:1300px;
@@ -510,6 +512,8 @@
       <a href="#/notifications" data-view="notifications">
         <span class="ico">&#128276;</span> Notifications
         <span class="count" id="nav-count" style="display:none">0</span></a>
+      <a href="#/audit" data-view="audit">
+        <span class="ico">&#128220;</span> Audit Trail</a>
     </nav>
 
     <div class="spacer"></div>
@@ -527,7 +531,10 @@
         <span class="slider"></span>
       </label>
     </div>
-    <div class="side-foot">AI Prototype &bull; MCA Project</div>
+    <div class="side-foot">
+      <a href="/logout" id="logout-link">Logout</a>
+      &bull; AI Prototype &bull; MCA Project
+    </div>
   </aside>
 
   <main>
@@ -761,6 +768,27 @@
         <div id="resolved-box"></div>
       </div>
     </section>
+
+    <!-- ================================================== AUDIT -->
+    <section class="view" id="view-audit">
+      <div class="card">
+        <div class="section-head">
+          <div><h2>Audit Trail</h2>
+               <p class="sub">Append-only record of every operator action</p></div>
+          <button class="btn-ghost" onclick="renderAudit()">&#8635; Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Time</th><th>Operator</th><th>Action</th><th>Detail</th>
+            </tr></thead>
+            <tbody id="audit-body">
+              <tr class="muted-row"><td colspan="4">No audit entries yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -805,6 +833,8 @@ const PAGE_HEAD = {
            "Enrolled identities in the recognition gallery"],
   notifications: ["VC Cabin / Notifications", "Notifications",
                   "Unacknowledged visitor alerts"],
+  audit: ["VC Cabin / Audit Trail", "Audit Trail",
+          "Append-only record of every operator action"],
 };
 
 function showView(name) {
@@ -820,10 +850,11 @@ function showView(name) {
   if (name === "logs")        renderLogs();
   if (name === "people")      renderPeople();
   if (name === "notifications") renderAlerts();
+  if (name === "audit")       renderAudit();
 }
 function routeFromHash() {
   const name = (location.hash.replace(/^#\/?/, "") || "dashboard");
-  showView(["dashboard","logs","people","notifications"].includes(name)
+  showView(["dashboard","logs","people","notifications","audit"].includes(name)
     ? name : "dashboard");
 }
 window.addEventListener("hashchange", routeFromHash);
@@ -1052,6 +1083,34 @@ async function renderPeople() {
   } catch (e) {}
 }
 
+/* ---------------------------------------------------------- audit trail */
+const AUDIT_CHIP = {
+  "login.success":      "chip-blue", "login.failed":  "chip-bad",
+  "login.locked":       "chip-bad",  "logout":        "chip",
+  "alert.ack":          "chip-ok",   "alert.ack_all": "chip-ok",
+  "alert.reject":       "chip-bad",
+  "person.enroll":      "chip-ok",   "person.enroll_failed": "chip-bad",
+  "person.deactivate":  "chip-bad",
+  "recognition.toggle": "chip-blue", "image.analyze": "chip",
+  "system.start":       "chip",      "retention.purge": "chip",
+};
+async function renderAudit() {
+  try {
+    const rows = await (await fetch("/api/audit?limit=200")).json();
+    const tb = $("audit-body");
+    if (!rows.length) {
+      tb.innerHTML = `<tr class="muted-row"><td colspan="4">No audit entries yet.</td></tr>`;
+      return;
+    }
+    tb.innerHTML = rows.map(r => `<tr>
+      <td class="mono">${fmtTime(r.at)}</td>
+      <td class="mono">${esc(r.actor)}</td>
+      <td><span class="chip ${AUDIT_CHIP[r.action] || "chip"}">${esc(r.action)}</span></td>
+      <td class="mono">${esc(r.detail || "-")}</td>
+    </tr>`).join("");
+  } catch (e) {}
+}
+
 /* ----------------------------------------------------- image analyze */
 let chosenFile = null;
 $("choose-btn").onclick = () => $("img-input").click();
@@ -1144,6 +1203,7 @@ async function refreshAll() {
     renderStatus(), renderAlerts(), renderRecent(),
     $("view-logs").classList.contains("active") ? renderLogs() : Promise.resolve(),
     $("view-people").classList.contains("active") ? renderPeople() : Promise.resolve(),
+    $("view-audit").classList.contains("active") ? renderAudit() : Promise.resolve(),
   ]);
 }
 routeFromHash();
