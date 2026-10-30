@@ -51,6 +51,14 @@ Beyond detect/recognize/log, the system behaves like a security appliance:
 
 ## Setup
 
+**Windows (one-click):** double-click `run.bat`. It finds your Python
+(prefers 3.14, falls back to `python` / `py`), installs the dependencies from
+`requirements.txt` on the first run only (checked via imports, so later runs
+start instantly), verifies the model files are present, and starts the
+dashboard. Any arguments are passed through (`run.bat --port 5001`).
+
+Manual setup:
+
 ```powershell
 python -m pip install -r requirements.txt        # runtime
 python -m pip install -r requirements-dev.txt    # + pytest for the test suite
@@ -86,6 +94,7 @@ admin password.
 ### Local development
 
 ```powershell
+run.bat                                # Windows: setup + start in one double-click
 $env:VC_ADMIN_PASSWORD = "your-password"
 python app.py                          # webcam 0, or sample_data if no webcam
 python app.py --source video.mp4       # video file
