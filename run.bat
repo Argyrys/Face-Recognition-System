@@ -62,9 +62,22 @@ if %errorlevel% neq 0 (
     echo  [OK] Dependencies ready.
 )
 
-rem --- 3. sanity-check the models (tracked in git, but ZIP exports can omit them)
-if not exist "models\face_detection_yunet_2023mar.onnx" goto :missing_models
-if not exist "models\face_recognition_sface_2021dec.onnx" goto :missing_models
+rem --- 3. ensure the ONNX model weights are present (auto-download if missing)
+if not exist "models\face_detection_yunet_2023mar.onnx" (
+    echo.
+    echo  [SETUP] Downloading face-detection model ...
+    echo          (OpenCV zoo, ~20 MB - only happens once)
+    call :download "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet_2023mar.onnx" "models\face_detection_yunet_2023mar.onnx"
+    if errorlevel 1 goto :missing_models
+)
+if not exist "models\face_recognition_sface_2021dec.onnx" (
+    echo.
+    echo  [SETUP] Downloading face-recognition model ...
+    echo          (OpenCV zoo, ~10 MB - only happens once)
+    call :download "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface_2021dec.onnx" "models\face_recognition_sface_2021dec.onnx"
+    if errorlevel 1 goto :missing_models
+)
+echo  [OK] Models ready.
 
 rem --- 4. launch ------------------------------------------------------
 echo.
@@ -82,12 +95,26 @@ echo  [EXIT] app.py stopped (code %RC%).
 pause
 exit /b %RC%
 
+:download
+rem --- download a file via curl (Win10+) or PowerShell fallback -----------
+set "URL=%~1"
+set "OUT=%~2"
+curl -fL --retry 3 --retry-delay 2 "%URL%" -o "%OUT%" >nul 2>nul
+if not errorlevel 1 goto :eof
+rem curl not available or failed - try PowerShell
+powershell -NoProfile -Command ^
+    "try { (New-Object System.Net.WebClient).DownloadFile('%URL%', '%OUT%'); exit 0 } catch { exit 1 }"
+if not errorlevel 1 goto :eof
+echo  [ERROR] Failed to download %OUT%
+echo          URL: %URL%
+echo          Check your internet connection and try again.
+exit /b 1
+
 :missing_models
 echo.
-echo  [ERROR] Model files are missing from models\.
-echo          If you downloaded the project as a ZIP, clone it with git instead:
-echo              git clone https://github.com/Argyrys/Face-Recognition-System.git
-echo          or download the two .onnx files manually (URLs in README.md).
+echo  [ERROR] Model files could not be downloaded.
+echo          Check your internet connection and try again, or download
+echo          manually from the OpenCV zoo (URLs in README.md).
 echo.
 pause
 exit /b 1
